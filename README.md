@@ -20,7 +20,7 @@ drużyna (left/right) + numer na koszulce. Metryka: GS-HOTA.
 | YOLOv11 (ultralytics) | `YoloOnnxDetector` — ONNX Runtime + letterbox + NMS | ✅ (wymaga eksportu modelu) |
 | `TrackletTeamClustering` (sklearn KMeans) | `TrackletTeamClustering` + własny KMeans (k-means++) | ✅ |
 | `VotingTrackletJerseyNumber` | `VotingTrackletJerseyNumber` | ✅ |
-| StrongSORT (tracking) | `SnGameState.Track.StrongSortTracker` | 🔜 |
+| StrongSORT (tracking, bpbreid_strong_sort) | osobna biblioteka **`src/StrongSort`** (pakiet `StrongSort.Net`, zero zależności) + adapter `SnGameState.Track.StrongSortModule` | ✅ |
 | PRTReid (reid + rola + drużyna) | ONNX (eksport z prtreid) | 🔜 |
 | MMOCR (numery koszulek) | ONNX (detektor tekstu + rozpoznawanie) | 🔜 |
 | Kalibracja (TVCalib / NBJW / PnLCalib) | ONNX (keypointy linii) + homografia (OpenCvSharp) | 🔜 |
@@ -34,6 +34,7 @@ wagi PyTorch trzeba jednorazowo wyeksportować do ONNX (skrypty będą w `tools/
 
 ## Struktura
 
+- `src/StrongSort` — samodzielna implementacja StrongSORT (NSA Kalman, EMA appearance, Hungarian) — publikowalna jako NuGet `StrongSort.Net` (`dotnet pack src/StrongSort`)
 - `src/TrackLab` — rdzeń frameworku trackingu (port `tracklab`)
 - `src/SnGameState` — moduły piłkarskie (port `sn_gamestate`)
 - `src/SnGameState.Cli` — punkt wejścia (odpowiednik `tracklab -cn soccernet`)

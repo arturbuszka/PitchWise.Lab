@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\TrackLab\TrackLab.csproj" />
+    <ProjectReference Include="..\StrongSort\StrongSort.csproj" />
   </ItemGroup>
 
   <ItemGroup>
