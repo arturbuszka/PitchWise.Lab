@@ -1,0 +1,7 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/SnGameState.Cli/SnGameState.Cli.csproj" />
+    <Project Path="src/SnGameState/SnGameState.csproj" />
+    <Project Path="src/TrackLab/TrackLab.csproj" />
+  </Folder>
+</Solution>
