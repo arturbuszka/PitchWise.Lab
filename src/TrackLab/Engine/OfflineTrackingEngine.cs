@@ -84,19 +84,35 @@ public sealed class OfflineTrackingEngine
 
     private void RunDetectionLevel(DetectionLevelModule module, DataFrame detections, DataFrame imagePreds)
     {
-        var rows = detections.Rows.ToList();
-        foreach (var detBatch in rows.Chunk(module.BatchSize))
+        // detections of one frame are contiguous, so a one-image cache avoids
+        // re-reading the same file for every detection
+        Mat? cachedImage = null;
+        long cachedImageId = -1;
+        try
         {
-            var batch = new List<object>(detBatch.Length);
-            var metas = new List<Series>(detBatch.Length);
-            foreach (var detection in detBatch)
+            var rows = detections.Rows.ToList();
+            foreach (var detBatch in rows.Chunk(module.BatchSize))
             {
-                var metadata = imagePreds[detection.Get<long>("image_id")];
-                metas.Add(metadata);
-                using var image = LoadImage(metadata);
-                batch.Add(module.Preprocess(image, detection, metadata));
+                var batch = new List<object>(detBatch.Length);
+                var metas = new List<Series>(detBatch.Length);
+                foreach (var detection in detBatch)
+                {
+                    var metadata = imagePreds[detection.Get<long>("image_id")];
+                    metas.Add(metadata);
+                    if (cachedImageId != metadata.Index)
+                    {
+                        cachedImage?.Dispose();
+                        cachedImage = LoadImage(metadata);
+                        cachedImageId = metadata.Index;
+                    }
+                    batch.Add(module.Preprocess(cachedImage!, detection, metadata));
+                }
+                detections.Merge(module.Process(batch, detections, metas));
             }
-            detections.Merge(module.Process(batch, detections, metas));
+        }
+        finally
+        {
+            cachedImage?.Dispose();
         }
     }
 

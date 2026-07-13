@@ -1,26 +1,42 @@
 using Microsoft.Extensions.Logging;
+using SnGameState.Calibration;
 using SnGameState.Dataset;
+using SnGameState.Detection;
 using SnGameState.Jersey;
+using SnGameState.Reid;
 using SnGameState.Team;
+using SnGameState.Track;
 using SnGameState.Visualization;
 using TrackLab.Datastruct;
+using TrackLab.Engine;
 using TrackLab.Pipeline;
+using TrackLab.Wrappers;
 
 using var loggerFactory = LoggerFactory.Create(b => b.AddSimpleConsole());
 var log = loggerFactory.CreateLogger("sn-gamestate");
 
-// Odpowiednik `tracklab -cn soccernet`. Na razie dwie komendy:
-//   render <dataset_path> <split> <video_name> <out.mp4>  — render ground truth na mp4 (smoke test całości)
-//   pipeline — placeholder pełnego pipeline'u (wymaga modeli ONNX, patrz tools/export)
-if (args.Length >= 1 && args[0] == "render")
+return args switch
 {
-    if (args.Length != 5)
-    {
-        Console.WriteLine("usage: render <dataset_path> <split> <video_name> <out.mp4>");
-        return 1;
-    }
-    var (datasetPath, split, videoName, output) = (args[1], args[2], args[3], args[4]);
+    ["render", var dataset, var split, var video, var output] => Render(dataset, split, video, output),
+    ["track", var video, var output, .. var rest] => Track(video, output,
+        rest.Length > 0 ? rest[0] : "pretrained_models",
+        rest.Length > 1 ? int.Parse(rest[1]) : 0,
+        rest.Length > 2 ? double.Parse(rest[2]) : 0),
+    _ => Usage(),
+};
 
+int Usage()
+{
+    Console.WriteLine("""
+        usage:
+          render <dataset_path> <split> <video_name> <out.mp4>   render dataset ground truth
+          track <video.mp4> <out.mp4> [models_dir] [max_frames] [start_seconds]  run the pipeline on any video
+        """);
+    return 1;
+}
+
+int Render(string datasetPath, string split, string videoName, string output)
+{
     var videoFolder = Path.Combine(datasetPath, split, videoName);
     if (!Directory.Exists(videoFolder))
     {
@@ -44,19 +60,65 @@ if (args.Length >= 1 && args[0] == "render")
     return 0;
 }
 
-var pipeline = new Pipeline(new Module[]
+int Track(string videoPath, string output, string modelsDir, int maxFrames, double startSeconds = 0)
 {
-    // new YoloOnnxDetector("pretrained_models/yolo11m.onnx"),
-    // new PrtReidOnnx("pretrained_models/prtreid-soccernet-baseline.onnx"),
-    // new StrongSortModule(),
-    // new NbjwCalibKeypoints("pretrained_models/nbjw_kp.onnx", "pretrained_models/nbjw_lines.onnx"),
-    // new NbjwCalib(1920, 1080),
-    new TrackletTeamClustering(),
-    new TrackletTeamSideLabeling(),
-    new VotingTrackletJerseyNumber(),
-}, log);
+    string Model(string name) => Path.Combine(modelsDir, name);
+    bool Has(params string[] names) => names.All(n => File.Exists(Model(n)));
 
-log.LogInformation("dotnet-sn-gamestate — port SoccerNet Game State Reconstruction");
-log.LogInformation("Pipeline: {Pipeline}", pipeline.ToString());
-log.LogInformation("Modele ONNX wymagane do pełnego przebiegu — patrz tools/export/*.py");
-return 0;
+    if (!Has("yolo11m.onnx"))
+    {
+        Console.WriteLine($"missing {Model("yolo11m.onnx")} — export it with tools/export/export_yolo.py");
+        return 1;
+    }
+
+    var framesDir = Path.Combine(
+        Path.GetDirectoryName(Path.GetFullPath(output))!,
+        $"frames-{Path.GetFileNameWithoutExtension(videoPath)}");
+    log.LogInformation("Extracting frames of {Video} to {Dir}", videoPath, framesDir);
+    var set = ExternalVideo.Load(videoPath, framesDir, maxFrames: maxFrames, startSeconds: startSeconds);
+    var videoId = set.VideoMetadatas.Rows.First().Get<long>("id");
+    log.LogInformation("{N} frames", set.ImageMetadatas.Count);
+
+    var hasReid = Has("prtreid-soccernet-baseline.onnx");
+    var hasCalib = Has("nbjw_kp.onnx", "nbjw_lines.onnx");
+    var hasOcr = Has("mmocr_det.onnx", "mmocr_rec.onnx", "mmocr_charset.txt");
+    var imWidth = (int)set.VideoMetadatas.Rows.First().Get<long>("im_width");
+    var imHeight = (int)set.VideoMetadatas.Rows.First().Get<long>("im_height");
+
+    var modules = new List<Module> { new YoloOnnxDetector(Model("yolo11m.onnx"), minConfidence: 0.4f) };
+    if (hasReid)
+        modules.Add(new PrtReidOnnx(Model("prtreid-soccernet-baseline.onnx")));
+    modules.Add(new StrongSortModule());
+    if (hasCalib)
+    {
+        modules.Add(new NbjwCalibKeypoints(Model("nbjw_kp.onnx"), Model("nbjw_lines.onnx")));
+        modules.Add(new NbjwCalib(imWidth, imHeight));
+    }
+    if (hasOcr)
+        modules.Add(new MmocrOnnx(Model("mmocr_det.onnx"), Model("mmocr_rec.onnx"), Model("mmocr_charset.txt")));
+
+    var voteAttributes = new List<string>();
+    if (hasOcr) voteAttributes.Add("jersey_number");
+    if (hasReid) voteAttributes.Add("role");
+    if (voteAttributes.Count > 0)
+        modules.Add(new MajorityVoteTracklet(voteAttributes.ToArray()));
+    if (hasReid)
+    {
+        modules.Add(new TrackletTeamClustering());
+        if (hasCalib)
+            modules.Add(new TrackletTeamSideLabeling());
+    }
+
+    var pipeline = new Pipeline(modules, log);
+    log.LogInformation("reid={Reid} calibration={Calib} ocr={Ocr}", hasReid, hasCalib, hasOcr);
+
+    var state = new TrackerState(set);
+    var engine = new OfflineTrackingEngine(pipeline, state, log);
+    engine.TrackDataset();
+
+    log.LogInformation("Rendering to {Output}", output);
+    using var renderer = new GameStateVideoRenderer();
+    renderer.RenderVideo(state, videoId, output);
+    log.LogInformation("Done");
+    return 0;
+}

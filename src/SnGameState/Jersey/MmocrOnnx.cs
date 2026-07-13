@@ -191,12 +191,13 @@ public sealed class MmocrOnnx : DetectionLevelModule, IDisposable
 
     private static DenseTensor<float> ToNormalizedTensor(Mat image, float[] mean, float[] std)
     {
-        var tensor = new DenseTensor<float>(new[] { 1, 3, image.Height, image.Width });
+        int height = image.Height, width = image.Width;
+        var tensor = new DenseTensor<float>(new[] { 1, 3, height, width });
         image.GetArray(out Vec3b[] pixels);
-        for (var y = 0; y < image.Height; y++)
-            for (var x = 0; x < image.Width; x++)
+        for (var y = 0; y < height; y++)
+            for (var x = 0; x < width; x++)
             {
-                var px = pixels[y * image.Width + x];
+                var px = pixels[y * width + x];
                 tensor[0, 0, y, x] = (px.Item2 / 255f - mean[0]) / std[0];
                 tensor[0, 1, y, x] = (px.Item1 / 255f - mean[1]) / std[1];
                 tensor[0, 2, y, x] = (px.Item0 / 255f - mean[2]) / std[2];
@@ -222,8 +223,9 @@ public sealed class MmocrOnnx : DetectionLevelModule, IDisposable
             .ToList();
         if (candidates.Count == 0)
             return (null, 0);
-        var best = candidates.MaxBy(c => c.Score);
-        return (best.Number![..Math.Min(2, best.Number.Length)], best.Score);
+        var (number, score) = candidates.MaxBy(c => c.Score);
+        var digits = number!;
+        return (digits[..Math.Min(2, digits.Length)], score);
     }
 
     private sealed record Sample(Mat Crop, long DetectionIndex);

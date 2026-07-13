@@ -30,7 +30,7 @@ drużyna (left/right) + numer na koszulce. Metryka: GS-HOTA.
 | Wizualizacja (elipsy, minimapa, linie boiska) | `GameStateVisualizer` + `GameStateVideoRenderer` (mp4) + oryginalny `Radar.png` | ✅ |
 | Dataset SoccerNet-GSR (`Labels-GameState.json`) | `SnGameState.Dataset.SoccerNetGameState` | ✅ |
 | Hydra (`soccernet.yaml`) | YamlDotNet + kompozycja configów | 🔜 |
-| GS-HOTA (ewaluacja) | port z TrackEval | 🔜 |
+| GS-HOTA (ewaluacja) | `TrackLab.Eval.Hota` (rdzeń HOTA z TrackEval) + `SnGameState.Evaluation.GsHota` (jądro gaussowskie σ=2.5 + bramkowanie rola/drużyna/numer) | ✅ |
 
 Modele neuronowe (YOLO, PRTReid, MMOCR, kalibracja) biegną przez **Microsoft.ML.OnnxRuntime** —
 wagi PyTorch trzeba jednorazowo wyeksportować do ONNX (skrypty będą w `tools/export`).
@@ -50,4 +50,10 @@ dotnet build SnGameState.slnx
 dotnet run --project src/SnGameState.Cli
 # render ground truth na mp4 (elipsy + minimapa):
 dotnet run --project src/SnGameState.Cli -- render <ścieżka_SoccerNetGS> valid SNGS-021 out.mp4
+# pełny pipeline na dowolnym wideo (wymaga modeli ONNX w pretrained_models/):
+dotnet run --project src/SnGameState.Cli -- track mecz.mp4 out.mp4 [models_dir] [max_frames]
 ```
+
+`track` składa pipeline z modułów, dla których są modele: `yolo11m.onnx` (wymagany) →
+`prtreid-soccernet-baseline.onnx` (drużyny/role) → StrongSORT → `nbjw_kp/lines.onnx`
+(homografia + minimapa) → `mmocr_det/rec.onnx` (numery). Eksport: `tools/export/*.py`.
