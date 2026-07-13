@@ -6,6 +6,7 @@
     <Project Path="src/TrackLab/TrackLab.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/SnGameState.Tests/SnGameState.Tests.csproj" />
     <Project Path="tests/StrongSort.Tests/StrongSort.Tests.csproj" />
   </Folder>
 </Solution>

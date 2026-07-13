@@ -21,11 +21,14 @@ drużyna (left/right) + numer na koszulce. Metryka: GS-HOTA.
 | `TrackletTeamClustering` (sklearn KMeans) | `TrackletTeamClustering` + własny KMeans (k-means++) | ✅ |
 | `VotingTrackletJerseyNumber` | `VotingTrackletJerseyNumber` | ✅ |
 | StrongSORT (tracking, bpbreid_strong_sort) | osobna biblioteka **`src/StrongSort`** (pakiet `StrongSort.Net`, zero zależności) + adapter `SnGameState.Track.StrongSortModule` | ✅ |
-| PRTReid (reid + rola + drużyna) | ONNX (eksport z prtreid) | 🔜 |
+| PRTReid (reid + rola + drużyna) | `PrtReidOnnx` — ONNX (eksport: `tools/export/export_prtreid.py`) | ✅ |
 | MMOCR (numery koszulek) | ONNX (detektor tekstu + rozpoznawanie) | 🔜 |
-| Kalibracja (TVCalib / NBJW / PnLCalib) | ONNX (keypointy linii) + homografia (OpenCvSharp) | 🔜 |
-| `TrackletTeamSideLabeling` | port czystej logiki | 🔜 |
-| Wizualizacja (elipsy, minimapa) | OpenCvSharp | 🔜 |
+| Kalibracja NBJW (keypointy → homografia) | `NbjwCalibKeypoints` (ONNX) + `HeatmapDecoder` + `KeypointCompleter` + `FrameByFrameCalib` (RANSAC) + `NbjwCalib` (`bbox_pitch`) | ✅ |
+| Parametry kamery (`get_cam_params` + `heuristic_voting`) | `FrameByFrameCalib.GetCamParams`/`HeuristicVoting` (multi-plane `calibrateCamera`, pan/tilt/roll) → kolumna `parameters` | ✅ |
+| `MajorityVoteTracklet` (rola+numer per tracklet) | `TrackLab.Wrappers.MajorityVoteTracklet` | ✅ |
+| `TrackletTeamSideLabeling` | port czystej logiki | ✅ |
+| Wizualizacja (elipsy, minimapa, linie boiska) | `GameStateVisualizer` + `GameStateVideoRenderer` (mp4) + oryginalny `Radar.png` | ✅ |
+| Dataset SoccerNet-GSR (`Labels-GameState.json`) | `SnGameState.Dataset.SoccerNetGameState` | ✅ |
 | Hydra (`soccernet.yaml`) | YamlDotNet + kompozycja configów | 🔜 |
 | GS-HOTA (ewaluacja) | port z TrackEval | 🔜 |
 
@@ -45,4 +48,6 @@ wagi PyTorch trzeba jednorazowo wyeksportować do ONNX (skrypty będą w `tools/
 ```
 dotnet build SnGameState.slnx
 dotnet run --project src/SnGameState.Cli
+# render ground truth na mp4 (elipsy + minimapa):
+dotnet run --project src/SnGameState.Cli -- render <ścieżka_SoccerNetGS> valid SNGS-021 out.mp4
 ```
