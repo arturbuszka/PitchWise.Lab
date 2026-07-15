@@ -51,8 +51,8 @@ public sealed class MmocrOnnx : DetectionLevelModule, IDisposable
         int recHeight = 48, int recWidth = 320)
         : base(batchSize)
     {
-        _det = new InferenceSession(detModelPath);
-        _rec = new InferenceSession(recModelPath);
+        _det = OnnxSessions.Create(detModelPath);
+        _rec = OnnxSessions.Create(recModelPath);
         _charset = File.ReadAllLines(charsetPath).ToArray();
         _decodeMode = decodeMode;
         _recHeight = recHeight;
@@ -199,17 +199,8 @@ public sealed class MmocrOnnx : DetectionLevelModule, IDisposable
 
     private static DenseTensor<float> ToNormalizedTensor(Mat image, float[] mean, float[] std)
     {
-        int height = image.Height, width = image.Width;
-        var tensor = new DenseTensor<float>(new[] { 1, 3, height, width });
-        image.GetArray(out Vec3b[] pixels);
-        for (var y = 0; y < height; y++)
-            for (var x = 0; x < width; x++)
-            {
-                var px = pixels[y * width + x];
-                tensor[0, 0, y, x] = (px.Item2 / 255f - mean[0]) / std[0];
-                tensor[0, 1, y, x] = (px.Item1 / 255f - mean[1]) / std[1];
-                tensor[0, 2, y, x] = (px.Item0 / 255f - mean[2]) / std[2];
-            }
+        var tensor = new DenseTensor<float>(new[] { 1, 3, image.Height, image.Width });
+        TensorOps.CopyNormalizedChw(image, tensor.Buffer.Span, mean, std);
         return tensor;
     }
 

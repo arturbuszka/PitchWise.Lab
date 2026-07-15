@@ -1,0 +1,4 @@
+# Wariant CPU (do porównań / maszyn bez GPU) — reszta jak soccernet.yaml
+models_dir: pretrained_models
+onnx:
+  provider: cpu

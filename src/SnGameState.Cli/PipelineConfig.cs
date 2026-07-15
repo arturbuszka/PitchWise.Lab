@@ -20,12 +20,19 @@ namespace SnGameState.Cli;
 public sealed class PipelineConfig
 {
     public string ModelsDir { get; set; } = "pretrained_models";
+    public OnnxConfig Onnx { get; set; } = new();
     public DetectorConfig BboxDetector { get; set; } = new();
     public ReidConfig Reid { get; set; } = new();
     public TrackConfig Track { get; set; } = new();
     public PitchConfig Pitch { get; set; } = new();
     public CalibrationConfig Calibration { get; set; } = new();
     public JerseyConfig Jersey { get; set; } = new();
+
+    public sealed class OnnxConfig
+    {
+        public string Provider { get; set; } = "cpu";
+        public int DeviceId { get; set; }
+    }
 
     public sealed class DetectorConfig
     {
@@ -96,6 +103,11 @@ public sealed class PipelineConfig
                 "false" or "no" or "off" => false,
                 _ => Exists(models),
             };
+
+        OnnxSessions.Provider = Onnx.Provider.ToLowerInvariant() is "dml" or "directml"
+            ? OnnxProvider.DirectML : OnnxProvider.Cpu;
+        OnnxSessions.DeviceId = Onnx.DeviceId;
+        log?.LogInformation("ONNX provider: {Provider}", OnnxSessions.Provider);
 
         if (!Exists(BboxDetector.Model))
             throw new FileNotFoundException(

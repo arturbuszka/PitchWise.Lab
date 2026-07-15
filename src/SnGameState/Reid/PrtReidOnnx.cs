@@ -40,7 +40,7 @@ public sealed class PrtReidOnnx : DetectionLevelModule, IDisposable
     {
         _height = height;
         _width = width;
-        _session = new InferenceSession(modelPath);
+        _session = OnnxSessions.Create(modelPath);
     }
 
     public override object Preprocess(Mat image, Series detection, Series metadata)
@@ -50,17 +50,9 @@ public sealed class PrtReidOnnx : DetectionLevelModule, IDisposable
         using var crop = new Mat(image, rect);
         using var resized = crop.Resize(new Size(_width, _height));
 
+        // BGR -> RGB + ImageNet normalization (torchreid transforms), vectorized
         var tensor = new float[3 * _height * _width];
-        resized.GetArray(out Vec3b[] pixels);
-        for (var y = 0; y < _height; y++)
-            for (var x = 0; x < _width; x++)
-            {
-                var px = pixels[y * _width + x];
-                // BGR -> RGB + ImageNet normalization (torchreid transforms)
-                tensor[0 * _height * _width + y * _width + x] = (px.Item2 / 255f - ImageNetMean[0]) / ImageNetStd[0];
-                tensor[1 * _height * _width + y * _width + x] = (px.Item1 / 255f - ImageNetMean[1]) / ImageNetStd[1];
-                tensor[2 * _height * _width + y * _width + x] = (px.Item0 / 255f - ImageNetMean[2]) / ImageNetStd[2];
-            }
+        TensorOps.CopyNormalizedChw(resized, tensor, ImageNetMean, ImageNetStd);
         return new Sample(tensor, detection.Index);
     }
 

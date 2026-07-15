@@ -1,0 +1,6 @@
+# CPU bez OCR — do porównań wydajności
+models_dir: pretrained_models
+onnx:
+  provider: cpu
+jersey:
+  enabled: "false"

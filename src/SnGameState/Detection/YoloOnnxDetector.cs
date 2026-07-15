@@ -30,7 +30,7 @@ public sealed class YoloOnnxDetector : ImageLevelModule, IDisposable
     {
         _minConfidence = minConfidence;
         _inputSize = inputSize;
-        _session = new InferenceSession(modelPath);
+        _session = OnnxSessions.Create(modelPath);
     }
 
     public override object Preprocess(Mat image, DataFrame detections, Series metadata)
@@ -109,15 +109,7 @@ public sealed class YoloOnnxDetector : ImageLevelModule, IDisposable
             BorderTypes.Constant, new Scalar(114, 114, 114));
 
         var tensor = new DenseTensor<float>(new[] { 1, 3, size, size });
-        padded.GetArray(out Vec3b[] pixels);
-        for (var y = 0; y < size; y++)
-            for (var x = 0; x < size; x++)
-            {
-                var px = pixels[y * size + x];
-                tensor[0, 0, y, x] = px.Item2 / 255f; // BGR -> RGB
-                tensor[0, 1, y, x] = px.Item1 / 255f;
-                tensor[0, 2, y, x] = px.Item0 / 255f;
-            }
+        TensorOps.CopyNormalizedChw(padded, tensor.Buffer.Span);
         return (tensor, scale, padX, padY);
     }
 

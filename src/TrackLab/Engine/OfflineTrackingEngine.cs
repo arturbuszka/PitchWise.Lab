@@ -44,6 +44,7 @@ public sealed class OfflineTrackingEngine
         foreach (var model in _pipeline.Models)
         {
             _log?.LogInformation("Running module {Module}", model.Name);
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
             switch (model)
             {
                 case VideoLevelModule videoModule:
@@ -58,6 +59,9 @@ public sealed class OfflineTrackingEngine
                 default:
                     throw new NotSupportedException($"Unknown module level: {model.Level}");
             }
+            var perFrame = imagePreds.Count > 0 ? stopwatch.Elapsed.TotalSeconds / imagePreds.Count : 0;
+            _log?.LogInformation("{Module}: {Total:F1}s ({PerFrame:F2}s/frame)",
+                model.Name, stopwatch.Elapsed.TotalSeconds, perFrame);
             if (detections.IsEmpty && model.Level != "image")
                 return (detections, imagePreds);
         }

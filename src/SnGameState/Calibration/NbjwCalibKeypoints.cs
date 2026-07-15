@@ -30,8 +30,8 @@ public sealed class NbjwCalibKeypoints : ImageLevelModule, IDisposable
     public NbjwCalibKeypoints(string kpModelPath, string linesModelPath, int batchSize = 1)
         : base(batchSize)
     {
-        _kpSession = new InferenceSession(kpModelPath);
-        _linesSession = new InferenceSession(linesModelPath);
+        _kpSession = OnnxSessions.Create(kpModelPath);
+        _linesSession = OnnxSessions.Create(linesModelPath);
     }
 
     public override object Preprocess(Mat image, DataFrame detections, Series metadata)
@@ -39,15 +39,7 @@ public sealed class NbjwCalibKeypoints : ImageLevelModule, IDisposable
         // T.Compose([T.Resize((540, 960)), T.ToTensor()]) — RGB in [0, 1], no normalization
         using var resized = image.Resize(new Size(InputWidth, InputHeight));
         var tensor = new float[3 * InputHeight * InputWidth];
-        resized.GetArray(out Vec3b[] pixels);
-        for (var y = 0; y < InputHeight; y++)
-            for (var x = 0; x < InputWidth; x++)
-            {
-                var px = pixels[y * InputWidth + x];
-                tensor[0 * InputHeight * InputWidth + y * InputWidth + x] = px.Item2 / 255f;
-                tensor[1 * InputHeight * InputWidth + y * InputWidth + x] = px.Item1 / 255f;
-                tensor[2 * InputHeight * InputWidth + y * InputWidth + x] = px.Item0 / 255f;
-            }
+        TensorOps.CopyNormalizedChw(resized, tensor);
         return tensor;
     }
 

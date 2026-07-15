@@ -2,6 +2,10 @@
 # Moduły z "enabled: auto" włączają się, gdy ich modele ONNX istnieją w models_dir.
 models_dir: pretrained_models
 
+onnx:
+  provider: dml   # cpu | dml (DirectML — dowolne GPU DX12 na Windows, zero instalacji)
+  device_id: 1    # laptopy z hybrydową grafiką: 0 bywa zintegrowanym GPU (tu: AMD Vega), 1 = GeForce
+
 bbox_detector:
   model: yolo11m.onnx
   min_confidence: 0.4

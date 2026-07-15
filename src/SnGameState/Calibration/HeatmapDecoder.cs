@@ -1,11 +1,13 @@
 using Microsoft.ML.OnnxRuntime.Tensors;
+using OpenCvSharp;
 
 namespace SnGameState.Calibration;
 
 /// <summary>
 /// Port of nbjw_calib.utils.utils_heatmap: extraction of keypoint/line-extremity
 /// coordinates from HRNet heatmaps via max-pool non-maximum suppression, and the
-/// thresholding of coords_to_dict.
+/// thresholding of coords_to_dict. The max-pool is computed natively (cv2 dilate),
+/// mirroring the vectorized torch max_pool2d of the original.
 /// </summary>
 public static class HeatmapDecoder
 {
@@ -20,6 +22,7 @@ public static class HeatmapDecoder
     {
         int batch = heatmap.Dimensions[0], channels = heatmap.Dimensions[1];
         int height = heatmap.Dimensions[2], width = heatmap.Dimensions[3];
+        var buffer = ((DenseTensor<float>)heatmap).Buffer;
         var results = new List<Dictionary<int, Keypoint>>(batch);
 
         for (var n = 0; n < batch; n++)
@@ -28,7 +31,8 @@ public static class HeatmapDecoder
             // the last channel is the background heatmap (Python slices [:, :-1])
             for (var c = 0; c < channels - 1; c++)
             {
-                var best = FindPeaks(heatmap, n, c, height, width, minPixelDistance,
+                var plane = buffer.Slice(((n * channels) + c) * height * width, height * width);
+                var best = FindPeaks(plane, height, width, minPixelDistance,
                                      excludeBorder: true, maxPeaks: 1);
                 if (best.Count == 1 && best[0].Score > threshold)
                     keypoints[c + 1] = new Keypoint(best[0].X * scale, best[0].Y * scale, best[0].Score);
@@ -49,6 +53,7 @@ public static class HeatmapDecoder
     {
         int batch = heatmap.Dimensions[0], channels = heatmap.Dimensions[1];
         int height = heatmap.Dimensions[2], width = heatmap.Dimensions[3];
+        var buffer = ((DenseTensor<float>)heatmap).Buffer;
         var results = new List<Dictionary<int, LineSegment>>(batch);
 
         for (var n = 0; n < batch; n++)
@@ -56,7 +61,8 @@ public static class HeatmapDecoder
             var lines = new Dictionary<int, LineSegment>();
             for (var c = 0; c < channels - 1; c++)
             {
-                var peaks = FindPeaks(heatmap, n, c, height, width, minPixelDistance,
+                var plane = buffer.Slice(((n * channels) + c) * height * width, height * width);
+                var peaks = FindPeaks(plane, height, width, minPixelDistance,
                                       excludeBorder: false, maxPeaks: 2);
                 if (peaks.Count == 2 && peaks[0].Score > threshold && peaks[1].Score > threshold)
                     lines[c + 1] = new LineSegment(
@@ -68,39 +74,32 @@ public static class HeatmapDecoder
         return results;
     }
 
-    /// <summary>Local maxima of one channel within a (2*minDist+1)^2 window, best first.</summary>
+    /// <summary>Local maxima of one channel within a (2*minDist+1)^2 window, best first.
+    /// max-pool via native dilate, then a single scan for pixels equal to their window max.</summary>
     private static List<Keypoint> FindPeaks(
-        Tensor<float> heatmap, int n, int c, int height, int width,
-        int minDist, bool excludeBorder, int maxPeaks)
+        Memory<float> plane, int height, int width, int minDist, bool excludeBorder, int maxPeaks)
     {
+        var data = plane.ToArray();
+        var kernel = 2 * minDist + 1;
+        using var src = Mat.FromPixelData(height, width, MatType.CV_32FC1, data);
+        using var dilated = new Mat();
+        using var element = Cv2.GetStructuringElement(MorphShapes.Rect, new Size(kernel, kernel));
+        Cv2.Dilate(src, dilated, element);
+        dilated.GetArray(out float[] windowMax);
+
         var peaks = new List<Keypoint>();
-        for (var y = 0; y < height; y++)
+        int y0 = excludeBorder ? minDist : 0, y1 = excludeBorder ? height - minDist : height;
+        int x0 = excludeBorder ? minDist : 0, x1 = excludeBorder ? width - minDist : width;
+        for (var y = y0; y < y1; y++)
         {
-            if (excludeBorder && (y < minDist || y >= height - minDist)) continue;
-            for (var x = 0; x < width; x++)
+            var row = y * width;
+            for (var x = x0; x < x1; x++)
             {
-                if (excludeBorder && (x < minDist || x >= width - minDist)) continue;
-                var value = heatmap[n, c, y, x];
-                if (value <= 0) continue;
-                if (!IsLocalMax(heatmap, n, c, y, x, height, width, minDist, value)) continue;
-                peaks.Add(new Keypoint(x, y, value));
+                var value = data[row + x];
+                if (value > 0 && value == windowMax[row + x])
+                    peaks.Add(new Keypoint(x, y, value));
             }
         }
         return peaks.OrderByDescending(p => p.Score).Take(maxPeaks).ToList();
-    }
-
-    private static bool IsLocalMax(
-        Tensor<float> heatmap, int n, int c, int y, int x,
-        int height, int width, int minDist, float value)
-    {
-        var y0 = Math.Max(0, y - minDist);
-        var y1 = Math.Min(height - 1, y + minDist);
-        var x0 = Math.Max(0, x - minDist);
-        var x1 = Math.Min(width - 1, x + minDist);
-        for (var yy = y0; yy <= y1; yy++)
-            for (var xx = x0; xx <= x1; xx++)
-                if (heatmap[n, c, yy, xx] > value)
-                    return false;
-        return true;
     }
 }
