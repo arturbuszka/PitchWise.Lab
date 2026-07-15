@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using SnGameState.Calibration;
 using SnGameState.Dataset;
+using SnGameState.Evaluation;
 using SnGameState.Detection;
 using SnGameState.Jersey;
 using SnGameState.Reid;
@@ -15,13 +16,31 @@ using TrackLab.Wrappers;
 using var loggerFactory = LoggerFactory.Create(b => b.AddSimpleConsole());
 var log = loggerFactory.CreateLogger("sn-gamestate");
 
+// -c <config.yaml> anywhere in the args; defaults to configs/soccernet.yaml when present
+var argList = args.ToList();
+string? configPath = null;
+var configIdx = argList.IndexOf("-c");
+if (configIdx >= 0 && configIdx + 1 < argList.Count)
+{
+    configPath = argList[configIdx + 1];
+    argList.RemoveRange(configIdx, 2);
+}
+configPath ??= File.Exists("configs/soccernet.yaml") ? "configs/soccernet.yaml" : null;
+var config = SnGameState.Cli.PipelineConfig.Load(configPath);
+if (configPath is not null)
+    log.LogInformation("Config: {Config}", configPath);
+args = argList.ToArray();
+
 return args switch
 {
     ["render", var dataset, var split, var video, var output] => Render(dataset, split, video, output),
     ["track", var video, var output, .. var rest] => Track(video, output,
-        rest.Length > 0 ? rest[0] : "pretrained_models",
+        rest.Length > 0 ? rest[0] : null,
         rest.Length > 1 ? int.Parse(rest[1]) : 0,
         rest.Length > 2 ? double.Parse(rest[2]) : 0),
+    ["eval", var dataset, var split, var video, .. var rest] => Eval(dataset, split, video,
+        rest.Length > 0 ? rest[0] : null,
+        rest.Length > 1 ? int.Parse(rest[1]) : 0),
     _ => Usage(),
 };
 
@@ -31,6 +50,7 @@ int Usage()
         usage:
           render <dataset_path> <split> <video_name> <out.mp4>   render dataset ground truth
           track <video.mp4> <out.mp4> [models_dir] [max_frames] [start_seconds]  run the pipeline on any video
+          eval <dataset_path> <split> <video_name> [models_dir] [max_frames]     run pipeline + GS-HOTA vs ground truth
         """);
     return 1;
 }
@@ -60,16 +80,15 @@ int Render(string datasetPath, string split, string videoName, string output)
     return 0;
 }
 
-int Track(string videoPath, string output, string modelsDir, int maxFrames, double startSeconds = 0)
+Pipeline BuildPipeline(string? modelsDir, int imWidth, int imHeight)
 {
-    string Model(string name) => Path.Combine(modelsDir, name);
-    bool Has(params string[] names) => names.All(n => File.Exists(Model(n)));
+    if (modelsDir is not null)
+        config.ModelsDir = modelsDir;
+    return config.BuildPipeline(imWidth, imHeight, log);
+}
 
-    if (!Has("yolo11m.onnx"))
-    {
-        Console.WriteLine($"missing {Model("yolo11m.onnx")} — export it with tools/export/export_yolo.py");
-        return 1;
-    }
+int Track(string videoPath, string output, string? modelsDir, int maxFrames, double startSeconds = 0)
+{
 
     var framesDir = Path.Combine(
         Path.GetDirectoryName(Path.GetFullPath(output))!,
@@ -79,38 +98,9 @@ int Track(string videoPath, string output, string modelsDir, int maxFrames, doub
     var videoId = set.VideoMetadatas.Rows.First().Get<long>("id");
     log.LogInformation("{N} frames", set.ImageMetadatas.Count);
 
-    var hasReid = Has("prtreid-soccernet-baseline.onnx");
-    var hasCalib = Has("nbjw_kp.onnx", "nbjw_lines.onnx");
-    var hasOcr = Has("mmocr_det.onnx", "mmocr_rec.onnx", "mmocr_charset.txt");
     var imWidth = (int)set.VideoMetadatas.Rows.First().Get<long>("im_width");
     var imHeight = (int)set.VideoMetadatas.Rows.First().Get<long>("im_height");
-
-    var modules = new List<Module> { new YoloOnnxDetector(Model("yolo11m.onnx"), minConfidence: 0.4f) };
-    if (hasReid)
-        modules.Add(new PrtReidOnnx(Model("prtreid-soccernet-baseline.onnx")));
-    modules.Add(new StrongSortModule());
-    if (hasCalib)
-    {
-        modules.Add(new NbjwCalibKeypoints(Model("nbjw_kp.onnx"), Model("nbjw_lines.onnx")));
-        modules.Add(new NbjwCalib(imWidth, imHeight));
-    }
-    if (hasOcr)
-        modules.Add(new MmocrOnnx(Model("mmocr_det.onnx"), Model("mmocr_rec.onnx"), Model("mmocr_charset.txt")));
-
-    var voteAttributes = new List<string>();
-    if (hasOcr) voteAttributes.Add("jersey_number");
-    if (hasReid) voteAttributes.Add("role");
-    if (voteAttributes.Count > 0)
-        modules.Add(new MajorityVoteTracklet(voteAttributes.ToArray()));
-    if (hasReid)
-    {
-        modules.Add(new TrackletTeamClustering());
-        if (hasCalib)
-            modules.Add(new TrackletTeamSideLabeling());
-    }
-
-    var pipeline = new Pipeline(modules, log);
-    log.LogInformation("reid={Reid} calibration={Calib} ocr={Ocr}", hasReid, hasCalib, hasOcr);
+    var pipeline = BuildPipeline(modelsDir, imWidth, imHeight);
 
     var state = new TrackerState(set);
     var engine = new OfflineTrackingEngine(pipeline, state, log);
@@ -121,4 +111,84 @@ int Track(string videoPath, string output, string modelsDir, int maxFrames, doub
     renderer.RenderVideo(state, videoId, output);
     log.LogInformation("Done");
     return 0;
+}
+
+int Eval(string datasetPath, string split, string videoName, string? modelsDir, int maxFrames)
+{
+    var videoFolder = Path.Combine(datasetPath, split, videoName);
+    if (!Directory.Exists(videoFolder))
+    {
+        Console.WriteLine($"video folder not found: {videoFolder}");
+        return 1;
+    }
+    log.LogInformation("Loading {Folder}", videoFolder);
+    var set = SoccerNetGameState.LoadVideo(videoFolder);
+    if (maxFrames > 0)
+        set = TrimSet(set, maxFrames);
+    var videoId = set.VideoMetadatas.Rows.First().Get<long>("id");
+    var imWidth = (int)set.VideoMetadatas.Rows.First().Get<long>("im_width");
+    var imHeight = (int)set.VideoMetadatas.Rows.First().Get<long>("im_height");
+
+    var pipeline = BuildPipeline(modelsDir, imWidth, imHeight);
+    var state = new TrackerState(set);
+    new OfflineTrackingEngine(pipeline, state, log).TrackDataset();
+    var (predictions, _) = state.Load(videoId);
+
+    // frames in GT order; predictions must have an identity and a pitch position
+    // (mirrors the dropna in the Python save_for_eval)
+    var imageIds = set.ImagesOfVideo(videoId).Select(m => m.Index).ToList();
+    var gtFrames = new List<IReadOnlyList<GsDetection>>();
+    var predFrames = new List<IReadOnlyList<GsDetection>>();
+    foreach (var imageId in imageIds)
+    {
+        gtFrames.Add(set.DetectionsGt.Rows
+            .Where(d => Equals(d["image_id"], imageId) && d["bbox_pitch"] is BboxPitch
+                        && d.GetOrDefault<string>("role") != "ball")
+            .Select(d => ToGsDetection(d))
+            .ToList());
+        predFrames.Add(predictions.Rows
+            .Where(d => Equals(d["image_id"], imageId) && d.Has("track_id") && d["bbox_pitch"] is BboxPitch)
+            .Select(d => ToGsDetection(d))
+            .ToList());
+    }
+
+    var full = GsHota.Evaluate(gtFrames, predFrames);
+    var noJersey = GsHota.Evaluate(gtFrames, predFrames, new GsHotaOptions { UseJerseyNumbers = false });
+    var positionOnly = GsHota.Evaluate(gtFrames, predFrames,
+        new GsHotaOptions { UseJerseyNumbers = false, UseTeams = false, UseRoles = false });
+
+    Console.WriteLine();
+    Console.WriteLine($"GS-HOTA ({videoName}, {imageIds.Count} frames, {gtFrames.Sum(f => f.Count)} GT / {predFrames.Sum(f => f.Count)} pred detections)");
+    Console.WriteLine($"  full (role+team+jersey): HOTA={full.Hota:P1}  DetA={full.DetA:P1}  AssA={full.AssA:P1}  LocA={full.LocA:P1}");
+    Console.WriteLine($"  without jersey numbers:  HOTA={noJersey.Hota:P1}  DetA={noJersey.DetA:P1}  AssA={noJersey.AssA:P1}");
+    Console.WriteLine($"  position only:           HOTA={positionOnly.Hota:P1}  DetA={positionOnly.DetA:P1}  AssA={positionOnly.AssA:P1}");
+    return 0;
+}
+
+static GsDetection ToGsDetection(Series d)
+{
+    var pitch = d.Get<BboxPitch>("bbox_pitch");
+    return new GsDetection(
+        d.GetOrDefault<long>("track_id"),
+        pitch.XBottomMiddle, pitch.YBottomMiddle,
+        d.GetOrDefault<string>("role"),
+        d.GetOrDefault<string>("team"),
+        d.GetOrDefault<string>("jersey_number"));
+}
+
+static TrackLab.Datastruct.TrackingSet TrimSet(TrackLab.Datastruct.TrackingSet set, int maxFrames)
+{
+    var keptImages = new DataFrame();
+    var keptIds = new HashSet<long>();
+    foreach (var image in set.ImageMetadatas.Rows.OrderBy(r => r.GetOrDefault<long>("frame")).Take(maxFrames))
+    {
+        keptImages.Upsert(image);
+        keptIds.Add(image.Index);
+    }
+    return new TrackLab.Datastruct.TrackingSet
+    {
+        VideoMetadatas = set.VideoMetadatas,
+        ImageMetadatas = keptImages,
+        DetectionsGt = set.DetectionsGt.Where(d => keptIds.Contains(d.Get<long>("image_id"))),
+    };
 }

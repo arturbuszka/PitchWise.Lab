@@ -22,14 +22,14 @@ drużyna (left/right) + numer na koszulce. Metryka: GS-HOTA.
 | `VotingTrackletJerseyNumber` | `VotingTrackletJerseyNumber` | ✅ |
 | StrongSORT (tracking, bpbreid_strong_sort) | osobna biblioteka **`src/StrongSort`** (pakiet `StrongSort.Net`, zero zależności) + adapter `SnGameState.Track.StrongSortModule` | ✅ |
 | PRTReid (reid + rola + drużyna) | `PrtReidOnnx` — ONNX (eksport: `tools/export/export_prtreid.py`) | ✅ |
-| MMOCR (numery koszulek) | ONNX (detektor tekstu + rozpoznawanie) | 🔜 |
+| MMOCR (numery koszulek) | `MmocrOnnx` + `DbPostProcessor` — logika 1:1; wagi: PP-OCRv4 (det DB + rec CTC) zamiast DBNet-icdar15+SAR, bo mmcv/mmdeploy wymaga py≤3.11/torch≤2.1 (eksport SAR: `tools/export/export_mmocr.py`) | ✅ (wagi zastępcze) |
 | Kalibracja NBJW (keypointy → homografia) | `NbjwCalibKeypoints` (ONNX) + `HeatmapDecoder` + `KeypointCompleter` + `FrameByFrameCalib` (RANSAC) + `NbjwCalib` (`bbox_pitch`) | ✅ |
 | Parametry kamery (`get_cam_params` + `heuristic_voting`) | `FrameByFrameCalib.GetCamParams`/`HeuristicVoting` (multi-plane `calibrateCamera`, pan/tilt/roll) → kolumna `parameters` | ✅ |
 | `MajorityVoteTracklet` (rola+numer per tracklet) | `TrackLab.Wrappers.MajorityVoteTracklet` | ✅ |
 | `TrackletTeamSideLabeling` | port czystej logiki | ✅ |
 | Wizualizacja (elipsy, minimapa, linie boiska) | `GameStateVisualizer` + `GameStateVideoRenderer` (mp4) + oryginalny `Radar.png` | ✅ |
 | Dataset SoccerNet-GSR (`Labels-GameState.json`) | `SnGameState.Dataset.SoccerNetGameState` | ✅ |
-| Hydra (`soccernet.yaml`) | YamlDotNet + kompozycja configów | 🔜 |
+| Hydra (`soccernet.yaml`) | `configs/soccernet.yaml` + `PipelineConfig` (YamlDotNet) | ✅ |
 | GS-HOTA (ewaluacja) | `TrackLab.Eval.Hota` (rdzeń HOTA z TrackEval) + `SnGameState.Evaluation.GsHota` (jądro gaussowskie σ=2.5 + bramkowanie rola/drużyna/numer) | ✅ |
 
 Modele neuronowe (YOLO, PRTReid, MMOCR, kalibracja) biegną przez **Microsoft.ML.OnnxRuntime** —
@@ -51,8 +51,13 @@ dotnet run --project src/SnGameState.Cli
 # render ground truth na mp4 (elipsy + minimapa):
 dotnet run --project src/SnGameState.Cli -- render <ścieżka_SoccerNetGS> valid SNGS-021 out.mp4
 # pełny pipeline na dowolnym wideo (wymaga modeli ONNX w pretrained_models/):
-dotnet run --project src/SnGameState.Cli -- track mecz.mp4 out.mp4 [models_dir] [max_frames]
+dotnet run --project src/SnGameState.Cli -- track mecz.mp4 out.mp4 [models_dir] [max_frames] [start_seconds]
+# pipeline + metryka GS-HOTA vs ground truth datasetu:
+dotnet run --project src/SnGameState.Cli -- eval <ścieżka_SoccerNetGS> valid SNGS-021 [models_dir] [max_frames]
 ```
+
+Parametry modułów konfiguruje `configs/soccernet.yaml` (odpowiednik Hydry; flaga `-c inny.yaml`).
+Moduły z `enabled: auto` włączają się, gdy ich modele ONNX są w `models_dir`.
 
 `track` składa pipeline z modułów, dla których są modele: `yolo11m.onnx` (wymagany) →
 `prtreid-soccernet-baseline.onnx` (drużyny/role) → StrongSORT → `nbjw_kp/lines.onnx`

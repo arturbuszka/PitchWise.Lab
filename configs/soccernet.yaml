@@ -1,0 +1,37 @@
+# Odpowiednik sn_gamestate/configs/soccernet.yaml (Hydra) dla portu .NET.
+# Moduły z "enabled: auto" włączają się, gdy ich modele ONNX istnieją w models_dir.
+models_dir: pretrained_models
+
+bbox_detector:
+  model: yolo11m.onnx
+  min_confidence: 0.4
+  input_size: 640
+
+reid:
+  enabled: auto
+  model: prtreid-soccernet-baseline.onnx
+  batch_size: 8
+
+track:  # hiperparametry bpbreid_strong_sort.yaml
+  ema_alpha: 0.9
+  mc_lambda: 0.995
+  max_appearance_distance: 0.5
+  max_iou_distance: 0.8
+  max_age: 300
+  n_init: 0
+  min_confidence: 0.0
+
+pitch:
+  enabled: auto
+  kp_model: nbjw_kp.onnx
+  lines_model: nbjw_lines.onnx
+
+calibration:
+  enabled: auto
+  use_prev_homography: true
+
+jersey:
+  enabled: auto
+  det_model: mmocr_det.onnx
+  rec_model: mmocr_rec.onnx
+  charset: mmocr_charset.txt

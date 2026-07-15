@@ -10,7 +10,8 @@ namespace SnGameState.Jersey;
 /// <summary>How to decode the recognizer output logits into characters.</summary>
 public enum RecDecodeMode
 {
-    /// <summary>CTC head (CRNN/SVTR): collapse repeats, skip the blank class.</summary>
+    /// <summary>CTC head (PP-OCR/CRNN/SVTR): blank at class 0, charset shifted by one;
+    /// collapse repeats and skip blanks.</summary>
     Ctc,
     /// <summary>Attention head (SAR): read until the end-of-sequence class.</summary>
     Attention,
@@ -46,8 +47,8 @@ public sealed class MmocrOnnx : DetectionLevelModule, IDisposable
 
     /// <param name="charsetPath">Text file with one recognizer dictionary character per line.</param>
     public MmocrOnnx(string detModelPath, string recModelPath, string charsetPath,
-        int batchSize = 8, RecDecodeMode decodeMode = RecDecodeMode.Attention,
-        int recHeight = 48, int recWidth = 160)
+        int batchSize = 8, RecDecodeMode decodeMode = RecDecodeMode.Ctc,
+        int recHeight = 48, int recWidth = 320)
         : base(batchSize)
     {
         _det = new InferenceSession(detModelPath);
@@ -158,13 +159,13 @@ public sealed class MmocrOnnx : DetectionLevelModule, IDisposable
             for (var c = 0; c < classes; c++)
                 if (logits[0, t, c] > bestLogit) { bestLogit = logits[0, t, c]; best = c; }
 
-            var probability = Softmax(logits, t, best, classes);
+            var probability = Probability(logits, t, best, classes);
             if (_decodeMode == RecDecodeMode.Ctc)
             {
-                // blank is the last class in mmocr CTC dictionaries
-                if (best != classes - 1 && best != previous && best < _charset.Length)
+                // blank = class 0, characters shifted by one (PP-OCR convention)
+                if (best != 0 && best != previous && best - 1 < _charset.Length)
                 {
-                    text.Append(_charset[best]);
+                    text.Append(_charset[best - 1]);
                     scores.Add(probability);
                 }
                 previous = best;
@@ -180,13 +181,20 @@ public sealed class MmocrOnnx : DetectionLevelModule, IDisposable
         return (text.ToString(), scores.Count > 0 ? scores.Average() : 0);
     }
 
-    private static double Softmax(Tensor<float> logits, int t, int target, int classes)
+    /// <summary>Confidence of the chosen class; applies softmax only when the model
+    /// outputs raw logits (PP-OCR models already emit probabilities).</summary>
+    private static double Probability(Tensor<float> logits, int t, int target, int classes)
     {
+        var sum = 0.0;
+        for (var c = 0; c < classes; c++) sum += logits[0, t, c];
+        if (Math.Abs(sum - 1.0) < 0.01)
+            return logits[0, t, target];
+
         var max = float.MinValue;
         for (var c = 0; c < classes; c++) max = Math.Max(max, logits[0, t, c]);
-        var sum = 0.0;
-        for (var c = 0; c < classes; c++) sum += Math.Exp(logits[0, t, c] - max);
-        return Math.Exp(logits[0, t, target] - max) / sum;
+        var expSum = 0.0;
+        for (var c = 0; c < classes; c++) expSum += Math.Exp(logits[0, t, c] - max);
+        return Math.Exp(logits[0, t, target] - max) / expSum;
     }
 
     private static DenseTensor<float> ToNormalizedTensor(Mat image, float[] mean, float[] std)
