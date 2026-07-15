@@ -3,6 +3,7 @@
   <ItemGroup>
     <ProjectReference Include="..\TrackLab\TrackLab.csproj" />
     <ProjectReference Include="..\StrongSort\StrongSort.csproj" />
+    <ProjectReference Include="..\PitchWise.Engine\PitchWise.Engine.csproj" />
   </ItemGroup>
 
   <ItemGroup>

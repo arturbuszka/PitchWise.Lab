@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/SnGameState.Cli/SnGameState.Cli.csproj" />
+    <Project Path="src/PitchWise.Engine/PitchWise.Engine.csproj" />
     <Project Path="src/SnGameState/SnGameState.csproj" />
     <Project Path="src/StrongSort/StrongSort.csproj" />
     <Project Path="src/TrackLab/TrackLab.csproj" />

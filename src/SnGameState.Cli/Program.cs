@@ -1,4 +1,7 @@
+using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using PitchWise.Engine;
+using SnGameState.WorldState;
 using SnGameState.Calibration;
 using SnGameState.Dataset;
 using SnGameState.Evaluation;
@@ -38,6 +41,10 @@ return args switch
         rest.Length > 0 ? rest[0] : null,
         rest.Length > 1 ? int.Parse(rest[1]) : 0,
         rest.Length > 2 ? double.Parse(rest[2]) : 0),
+    ["stats", var video, var output, .. var rest] => Stats(video, output,
+        rest.Length > 0 ? rest[0] : null,
+        rest.Length > 1 ? int.Parse(rest[1]) : 0,
+        rest.Length > 2 ? double.Parse(rest[2]) : 0),
     ["eval", var dataset, var split, var video, .. var rest] => Eval(dataset, split, video,
         rest.Length > 0 ? rest[0] : null,
         rest.Length > 1 ? int.Parse(rest[1]) : 0),
@@ -50,6 +57,7 @@ int Usage()
         usage:
           render <dataset_path> <split> <video_name> <out.mp4>   render dataset ground truth
           track <video.mp4> <out.mp4> [models_dir] [max_frames] [start_seconds]  run the pipeline on any video
+          stats <video.mp4> <out.json> [models_dir] [max_frames] [start_seconds] run the pipeline + collect match statistics
           eval <dataset_path> <split> <video_name> [models_dir] [max_frames]     run pipeline + GS-HOTA vs ground truth
         """);
     return 1;
@@ -110,6 +118,52 @@ int Track(string videoPath, string output, string? modelsDir, int maxFrames, dou
     using var renderer = new GameStateVideoRenderer();
     renderer.RenderVideo(state, videoId, output);
     log.LogInformation("Done");
+    return 0;
+}
+
+int Stats(string videoPath, string output, string? modelsDir, int maxFrames, double startSeconds = 0)
+{
+    var framesDir = Path.Combine(
+        Path.GetDirectoryName(Path.GetFullPath(output))!,
+        $"frames-{Path.GetFileNameWithoutExtension(videoPath)}");
+    log.LogInformation("Extracting frames of {Video} to {Dir}", videoPath, framesDir);
+    var set = ExternalVideo.Load(videoPath, framesDir, maxFrames: maxFrames, startSeconds: startSeconds);
+    var video = set.VideoMetadatas.Rows.First();
+    var videoId = video.Get<long>("id");
+    var fps = video.Get<long>("frame_rate");
+    log.LogInformation("{N} frames @ {Fps} fps", set.ImageMetadatas.Count, fps);
+
+    var imWidth = (int)video.Get<long>("im_width");
+    var imHeight = (int)video.Get<long>("im_height");
+    var pipeline = BuildPipeline(modelsDir, imWidth, imHeight);
+
+    var state = new TrackerState(set);
+    new OfflineTrackingEngine(pipeline, state, log).TrackDataset();
+    var (detections, imagePreds) = state.Load(videoId);
+
+    log.LogInformation("Collecting match statistics");
+    var observations = ObservationAdapter.ToObservations(detections, imagePreds, fps);
+
+    // Dump the observation stream alongside the report, so EngineConfig thresholds can be
+    // re-tuned via WorldStateReplay without decoding the video again.
+    var jsonlPath = Path.ChangeExtension(output, ".world_state.jsonl");
+    using var dump = WorldStateJsonl.TryCreate(jsonlPath,
+        new WorldStateJsonl.Header(fps, FrameStride: 1, PitchLength: 105, PitchWidth: 68, NormalizedCoords: false));
+
+    var collector = new MatchStatsCollector();
+    var report = collector.Run(observations, (obs, _) => dump?.Append(obs));
+
+    var json = JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true });
+    File.WriteAllText(output, json);
+
+    log.LogInformation("Wrote {Output} ({Frames} frames)", output, report.FramesProcessed);
+    Console.WriteLine();
+    Console.WriteLine($"Possession — A: {report.TeamA.PossessionPct}%  B: {report.TeamB.PossessionPct}%  " +
+                      $"(controlled {report.ControlledSeconds:F1}s, loose {report.LooseSeconds:F1}s)");
+    Console.WriteLine($"Passes     — A: {report.TeamA.Passes} ({report.TeamA.PassAccuracyPct}% acc, {report.TeamA.Turnovers} lost)  " +
+                      $"B: {report.TeamB.Passes} ({report.TeamB.PassAccuracyPct}% acc, {report.TeamB.Turnovers} lost)");
+    Console.WriteLine($"Players    — {report.Players.Count} tracked; top distance: " +
+                      string.Join(", ", report.Players.Take(3).Select(p => $"#{p.TrackId} {p.DistanceMeters:F0}m")));
     return 0;
 }
 

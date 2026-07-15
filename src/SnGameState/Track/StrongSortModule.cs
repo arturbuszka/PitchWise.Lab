@@ -1,4 +1,5 @@
 using OpenCvSharp;
+using SnGameState.Detection;
 using StrongSort;
 using TrackLab.Datastruct;
 using TrackLab.Pipeline;
@@ -35,14 +36,18 @@ public sealed class StrongSortModule : ImageLevelModule
 
     public override object Preprocess(Mat image, DataFrame detections, Series metadata)
     {
-        return detections.Rows.Select(row =>
-        {
-            var bbox = row.Get<float[]>("bbox_ltwh");
-            return new Observation(bbox[0], bbox[1], bbox[2], bbox[3],
-                Convert.ToSingle(row["bbox_conf"]),
-                Feature: row.GetOrDefault<float[]>("embeddings"),
-                Tag: row.Index);
-        }).ToList();
+        // Person-only tracker: the ball (category_id != person) rides in the same DataFrame for
+        // calibration but must never enter the appearance tracker, which is built for people.
+        return detections.Rows
+            .Where(row => Convert.ToInt64(row["category_id"]) == YoloOnnxDetector.PersonCategoryId)
+            .Select(row =>
+            {
+                var bbox = row.Get<float[]>("bbox_ltwh");
+                return new Observation(bbox[0], bbox[1], bbox[2], bbox[3],
+                    Convert.ToSingle(row["bbox_conf"]),
+                    Feature: row.GetOrDefault<float[]>("embeddings"),
+                    Tag: row.Index);
+            }).ToList();
     }
 
     public override ModuleOutput Process(IReadOnlyList<object> batch, DataFrame detections, IReadOnlyList<Series> metadatas)
