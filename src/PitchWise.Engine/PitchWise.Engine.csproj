@@ -9,7 +9,7 @@
   <!-- Deliberately no PackageReference. The engine is pure math over an abstract
        per-frame observation: no OpenCV, no ONNX, no EF. Keeping it dependency-free is
        what lets the vision layer be swapped without touching match logic, and what makes
-       it reusable across the sn-gamestate CLI and the pitchwise platform alike.
+       it reusable across the PitchWise game-state CLI and the wider PitchWise platform alike.
        System.Text.Json comes from the framework. Do not add packages here. -->
 
 </Project>

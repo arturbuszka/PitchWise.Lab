@@ -1,0 +1,38 @@
+PitchWise — Vision & Game State
+Copyright (c) 2026 Artur Buszka.
+
+This project is a .NET port of the SoccerNet Game State Reconstruction baseline. It is
+derived from, and builds on, the following third-party open-source works. Their original
+licenses apply to the portions of this project derived from them.
+
+--------------------------------------------------------------------------------
+sn-gamestate
+  Upstream:  https://github.com/SoccerNet/sn-gamestate
+  License:   GNU General Public License v3.0 (GPL-3.0)
+  Used for:  the football modules ported into src/PitchWise.GameState
+             (detection wiring, team clustering, jersey OCR, calibration,
+             reid, visualization, dataset loading, GS-HOTA evaluation).
+
+TrackLab
+  Upstream:  https://github.com/TrackingLaboratory/tracklab
+  License:   MIT License, Copyright (c) 2022 bstandaert
+  Used for:  the tracking-framework core ported into src/PitchWise.Tracking
+             (pipeline/module abstractions, DataFrame datastruct, offline
+             tracking engine, coordinate/attribute-voting utilities, HOTA core).
+
+StrongSORT
+  The standalone StrongSORT implementation in src/StrongSort (NuGet: StrongSort.Net)
+  is a clean-room C# implementation of the StrongSORT / DeepSORT algorithm. Default
+  hyperparameters are taken from the sn-gamestate bpbreid_strong_sort configuration.
+
+TrackEval (HOTA)
+  The HOTA metric core follows the reference implementation from
+  https://github.com/JonathonLuiten/TrackEval (MIT License).
+--------------------------------------------------------------------------------
+
+IMPORTANT — LICENSING STATUS
+Because sn-gamestate is licensed under GPL-3.0 and this project is a derivative port
+of it, the GPL-3.0 copyleft obligations may extend to this project as a whole. The
+overall license for PitchWise (and the license claimed for the StrongSort.Net package)
+is still under review and must be finalized before any public or binary distribution.
+Until then, see LICENSE for the current terms.

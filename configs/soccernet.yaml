@@ -1,10 +1,10 @@
-# Odpowiednik sn_gamestate/configs/soccernet.yaml (Hydra) dla portu .NET.
-# Moduły z "enabled: auto" włączają się, gdy ich modele ONNX istnieją w models_dir.
+# Default pipeline configuration (the Hydra equivalent) for the .NET port.
+# Modules with "enabled: auto" turn on when their ONNX models exist in models_dir.
 models_dir: pretrained_models
 
 onnx:
-  provider: dml   # cpu | dml (DirectML — dowolne GPU DX12 na Windows, zero instalacji)
-  device_id: 1    # laptopy z hybrydową grafiką: 0 bywa zintegrowanym GPU (tu: AMD Vega), 1 = GeForce
+  provider: dml   # cpu | dml (DirectML — any DX12 GPU on Windows, no install needed)
+  device_id: 1    # hybrid-graphics laptops: 0 is often the integrated GPU, 1 the discrete one
 
 bbox_detector:
   model: yolo11m.onnx
@@ -16,7 +16,7 @@ reid:
   model: prtreid-soccernet-baseline.onnx
   batch_size: 8
 
-track:  # hiperparametry bpbreid_strong_sort.yaml
+track:  # StrongSORT hyperparameters
   ema_alpha: 0.9
   mc_lambda: 0.995
   max_appearance_distance: 0.5

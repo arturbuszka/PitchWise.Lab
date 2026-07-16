@@ -1,0 +1,25 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\PitchWise.Tracking\PitchWise.Tracking.csproj" />
+    <ProjectReference Include="..\StrongSort\StrongSort.csproj" />
+    <ProjectReference Include="..\PitchWise.Engine\PitchWise.Engine.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AI.DirectML" Version="1.15.4" />
+    <PackageReference Include="Microsoft.ML.OnnxRuntime.DirectML" Version="1.24.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="Assets\Radar.png" CopyToOutputDirectory="PreserveNewest" />
+    <InternalsVisibleTo Include="PitchWise.GameState.Tests" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>

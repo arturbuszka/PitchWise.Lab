@@ -1,4 +1,4 @@
-# CPU bez OCR — do porównań wydajności
+# CPU without OCR — for performance benchmarking
 models_dir: pretrained_models
 onnx:
   provider: cpu
