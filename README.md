@@ -11,7 +11,9 @@ etc.) is built alongside it and consumes the world-state this engine produces.
 It is a .NET port of the SoccerNet
 [Game State Reconstruction](https://www.soccer-net.org/tasks/game-state-reconstruction) baseline
 ([sn-gamestate](https://github.com/SoccerNet/sn-gamestate) +
-[TrackLab](https://github.com/TrackingLaboratory/tracklab)). See [NOTICE](NOTICE) for attribution.
+[TrackLab](https://github.com/TrackingLaboratory/tracklab)).
+
+Licensed under **GPL-3.0** — see [LICENSE](LICENSE) and [NOTICE](NOTICE).
 
 ## Architecture
 
@@ -26,7 +28,7 @@ It is a .NET port of the SoccerNet
 | YOLOv11 (ultralytics) | `YoloOnnxDetector` — ONNX Runtime + letterbox + NMS | ✅ (requires model export) |
 | `TrackletTeamClustering` (sklearn KMeans) | `TrackletTeamClustering` + own KMeans (k-means++) | ✅ |
 | `VotingTrackletJerseyNumber` | `VotingTrackletJerseyNumber` | ✅ |
-| StrongSORT (tracking, bpbreid_strong_sort) | standalone library **`src/StrongSort`** (`StrongSort.Net`, zero deps) + adapter `PitchWise.GameState.Track.StrongSortModule` | ✅ |
+| StrongSORT (tracking, bpbreid_strong_sort) | separate MIT package [`StrongSort.Net`](https://github.com/arturbuszka/StrongSort.NET) (zero deps) + adapter `PitchWise.GameState.Track.StrongSortModule` | ✅ |
 | PRTReid (reid + role + team) | `PrtReidOnnx` — ONNX (export: `tools/export/export_prtreid.py`) | ✅ |
 | MMOCR (jersey numbers) | `MmocrOnnx` + `DbPostProcessor` — identical logic; weights: PP-OCRv4 (DB det + CTC rec) instead of DBNet-icdar15+SAR, because mmcv/mmdeploy requires py≤3.11/torch≤2.1 (SAR export: `tools/export/export_mmocr.py`) | ✅ (substitute weights) |
 | NBJW calibration (keypoints → homography) | `NbjwCalibKeypoints` (ONNX) + `HeatmapDecoder` + `KeypointCompleter` + `FrameByFrameCalib` (RANSAC) + `NbjwCalib` (`bbox_pitch`) | ✅ |
@@ -43,11 +45,13 @@ PyTorch weights must be exported to ONNX once (scripts under `tools/export`).
 
 ## Structure
 
-- `src/StrongSort` — standalone StrongSORT implementation (NSA Kalman, EMA appearance, Hungarian), publishable as the NuGet package `StrongSort.Net` (`dotnet pack src/StrongSort`)
 - `src/PitchWise.Tracking` — tracking-framework core (port of `tracklab`)
 - `src/PitchWise.GameState` — football modules (port of `sn_gamestate`)
 - `src/PitchWise.Engine` — dependency-free football rule/world-state engine
 - `src/PitchWise.Cli` — entry point (equivalent of `tracklab -cn soccernet`)
+
+StrongSORT tracking is provided by the separate MIT-licensed
+[StrongSort.Net](https://github.com/arturbuszka/StrongSort.NET) package, referenced via NuGet.
 
 ## Build
 

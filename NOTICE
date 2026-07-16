@@ -1,9 +1,11 @@
 PitchWise — Vision & Game State
 Copyright (c) 2026 Artur Buszka.
 
+Licensed under the GNU General Public License v3.0 (GPL-3.0). See the LICENSE file
+for the full license text.
+
 This project is a .NET port of the SoccerNet Game State Reconstruction baseline. It is
-derived from, and builds on, the following third-party open-source works. Their original
-licenses apply to the portions of this project derived from them.
+derived from, and builds on, the following third-party open-source works.
 
 --------------------------------------------------------------------------------
 sn-gamestate
@@ -20,19 +22,23 @@ TrackLab
              (pipeline/module abstractions, DataFrame datastruct, offline
              tracking engine, coordinate/attribute-voting utilities, HOTA core).
 
-StrongSORT
-  The standalone StrongSORT implementation in src/StrongSort (NuGet: StrongSort.Net)
-  is a clean-room C# implementation of the StrongSORT / DeepSORT algorithm. Default
-  hyperparameters are taken from the sn-gamestate bpbreid_strong_sort configuration.
-
 TrackEval (HOTA)
   The HOTA metric core follows the reference implementation from
   https://github.com/JonathonLuiten/TrackEval (MIT License).
 --------------------------------------------------------------------------------
 
-IMPORTANT — LICENSING STATUS
-Because sn-gamestate is licensed under GPL-3.0 and this project is a derivative port
-of it, the GPL-3.0 copyleft obligations may extend to this project as a whole. The
-overall license for PitchWise (and the license claimed for the StrongSort.Net package)
-is still under review and must be finalized before any public or binary distribution.
-Until then, see LICENSE for the current terms.
+Because sn-gamestate is GPL-3.0 and this project is a derivative port of it, PitchWise
+as a whole is licensed under GPL-3.0. The MIT-licensed portions derived from TrackLab
+remain usable under their original terms; the combined work is distributed under GPL-3.0.
+
+A note on hosted / SaaS use: GPL-3.0 obligations to provide Corresponding Source are
+triggered by *conveying* (distributing) the software — for example shipping a binary or
+container to a third party. Running PitchWise as a network service you operate yourself,
+without distributing the software to users, is "mere interaction over a network" and does
+not by itself require you to release the source of a separate service that uses it. (This
+is the practical difference between GPL-3.0 and AGPL-3.0; PitchWise uses GPL-3.0.) This
+paragraph is a plain-language summary, not legal advice — the LICENSE text governs.
+
+The StrongSORT tracker used by the pipeline is maintained as a separate, MIT-licensed
+package (StrongSort.Net, https://github.com/arturbuszka/StrongSort.NET) and is referenced
+as a NuGet dependency rather than included in this repository.

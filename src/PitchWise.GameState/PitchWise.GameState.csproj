@@ -2,8 +2,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\PitchWise.Tracking\PitchWise.Tracking.csproj" />
-    <ProjectReference Include="..\StrongSort\StrongSort.csproj" />
     <ProjectReference Include="..\PitchWise.Engine\PitchWise.Engine.csproj" />
+    <PackageReference Include="StrongSort.Net" Version="1.0.0" />
   </ItemGroup>
 
   <ItemGroup>
