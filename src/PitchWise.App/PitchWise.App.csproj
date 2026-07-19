@@ -1,0 +1,43 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\PitchWise.App.Core\PitchWise.App.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="12.1.0" />
+    <PackageReference Include="Avalonia.Desktop" Version="12.1.0" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.0" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="12.1.0" />
+    <PackageReference Include="Avalonia.Controls.DataGrid" Version="12.1.0" />
+    <!-- Avalonia.Diagnostics (the F12 inspector) has no 12.x build yet — newest is 11.3.18.
+         Add it back once one ships; it is a dev convenience, not a dependency of the app. -->
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.9" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="10.0.9" />
+  </ItemGroup>
+
+  <!-- Native assets only flow to an executable's output, so they belong here rather than on the
+       libraries: OpenCV for frame decoding, DirectML for the ONNX provider soccernet.yaml selects. -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AI.DirectML" Version="1.15.4" />
+    <PackageReference Include="OpenCvSharp4.runtime.win" Version="4.13.0.20260627" />
+  </ItemGroup>
+
+  <!-- Microsoft.AI.DirectML copies its native dll only for Platform=x64 builds;
+       under AnyCPU we have to place DirectML.dll next to the exe ourselves. -->
+  <ItemGroup>
+    <None Include="$(NuGetPackageRoot)microsoft.ai.directml\1.15.4\bin\x64-win\DirectML.dll"
+          CopyToOutputDirectory="PreserveNewest" Visible="false" />
+  </ItemGroup>
+
+</Project>

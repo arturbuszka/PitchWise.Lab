@@ -1,0 +1,92 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:PitchWise.App.Core.ViewModels"
+             xmlns:ws="using:PitchWise.GameState.WorldState"
+             mc:Ignorable="d" d:DesignWidth="460" d:DesignHeight="800"
+             x:Class="PitchWise.App.Views.StatsView"
+             x:DataType="vm:StatsViewModel">
+
+  <ScrollViewer Padding="16">
+    <StackPanel Spacing="18">
+
+      <StackPanel Spacing="2">
+        <TextBlock Text="{Binding DurationText}" FontSize="12" Foreground="#999" />
+        <TextBlock Text="{Binding BallStateText}" FontSize="11" Foreground="#666" />
+      </StackPanel>
+
+      <!-- possession: split over controlled time, so the two add up to 100 -->
+      <StackPanel Spacing="6">
+        <TextBlock Text="Possession" FontWeight="SemiBold" />
+        <Grid ColumnDefinitions="*,Auto">
+          <Grid Grid.Column="0" Height="26">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="{Binding PossessionABar}" />
+              <ColumnDefinition Width="{Binding PossessionBBar}" />
+            </Grid.ColumnDefinitions>
+            <Border Grid.Column="0" Background="#c0392b" CornerRadius="3,0,0,3" />
+            <Border Grid.Column="1" Background="#2980b9" CornerRadius="0,3,3,0" />
+          </Grid>
+        </Grid>
+        <Grid ColumnDefinitions="*,*">
+          <TextBlock Grid.Column="0" FontSize="12" Foreground="#e74c3c"
+                     Text="{Binding TeamA.PossessionPct, StringFormat='A  {0:F1}%'}" />
+          <TextBlock Grid.Column="1" FontSize="12" Foreground="#3498db" HorizontalAlignment="Right"
+                     Text="{Binding TeamB.PossessionPct, StringFormat='{}{0:F1}%  B'}" />
+        </Grid>
+      </StackPanel>
+
+      <!-- passing -->
+      <StackPanel Spacing="6">
+        <TextBlock Text="Passing" FontWeight="SemiBold" />
+        <Grid ColumnDefinitions="Auto,*,*" RowDefinitions="Auto,Auto,Auto,Auto">
+          <TextBlock Grid.Row="0" Grid.Column="1" Text="Team A" FontSize="11" Foreground="#e74c3c" />
+          <TextBlock Grid.Row="0" Grid.Column="2" Text="Team B" FontSize="11" Foreground="#3498db" />
+
+          <TextBlock Grid.Row="1" Grid.Column="0" Text="Passes" FontSize="12" Foreground="#999"
+                     Margin="0,0,20,0" />
+          <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding TeamA.Passes}" FontSize="12" />
+          <TextBlock Grid.Row="1" Grid.Column="2" Text="{Binding TeamB.Passes}" FontSize="12" />
+
+          <TextBlock Grid.Row="2" Grid.Column="0" Text="Accuracy" FontSize="12" Foreground="#999" />
+          <TextBlock Grid.Row="2" Grid.Column="1" FontSize="12"
+                     Text="{Binding TeamA.PassAccuracyPct, StringFormat='{}{0:F0}%'}" />
+          <TextBlock Grid.Row="2" Grid.Column="2" FontSize="12"
+                     Text="{Binding TeamB.PassAccuracyPct, StringFormat='{}{0:F0}%'}" />
+
+          <TextBlock Grid.Row="3" Grid.Column="0" Text="Turnovers" FontSize="12" Foreground="#999" />
+          <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding TeamA.Turnovers}" FontSize="12" />
+          <TextBlock Grid.Row="3" Grid.Column="2" Text="{Binding TeamB.Turnovers}" FontSize="12" />
+        </Grid>
+      </StackPanel>
+
+      <!-- players, by distance covered -->
+      <StackPanel Spacing="6">
+        <TextBlock Text="Players" FontWeight="SemiBold" />
+        <DataGrid ItemsSource="{Binding Players}" IsReadOnly="True" MaxHeight="420"
+                  GridLinesVisibility="Horizontal" HeadersVisibility="Column" FontSize="12"
+                  CanUserSortColumns="True">
+          <DataGrid.Columns>
+            <DataGridTextColumn Header="#" Width="46"
+                                Binding="{Binding TrackId, x:DataType=ws:PlayerStats}" />
+            <DataGridTextColumn Header="Team" Width="52"
+                                Binding="{Binding Team, x:DataType=ws:PlayerStats}" />
+            <DataGridTextColumn Header="Dist (m)" Width="72"
+                                Binding="{Binding DistanceMeters, StringFormat='{}{0:F0}', x:DataType=ws:PlayerStats}" />
+            <DataGridTextColumn Header="Top km/h" Width="74"
+                                Binding="{Binding TopSpeedKmh, StringFormat='{}{0:F1}', x:DataType=ws:PlayerStats}" />
+            <DataGridTextColumn Header="Avg km/h" Width="74"
+                                Binding="{Binding AvgSpeedKmh, StringFormat='{}{0:F1}', x:DataType=ws:PlayerStats}" />
+            <DataGridTextColumn Header="Sprints" Width="60"
+                                Binding="{Binding Sprints, x:DataType=ws:PlayerStats}" />
+            <DataGridTextColumn Header="Time (s)" Width="70"
+                                Binding="{Binding TimeOnPitchSeconds, StringFormat='{}{0:F0}', x:DataType=ws:PlayerStats}" />
+          </DataGrid.Columns>
+        </DataGrid>
+      </StackPanel>
+
+    </StackPanel>
+  </ScrollViewer>
+
+</UserControl>

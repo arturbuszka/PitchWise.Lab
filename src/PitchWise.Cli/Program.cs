@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using PitchWise.Engine;
 using PitchWise.GameState.WorldState;
 using PitchWise.GameState.Calibration;
+using PitchWise.GameState.Configuration;
 using PitchWise.GameState.Dataset;
 using PitchWise.GameState.Evaluation;
 using PitchWise.GameState.Detection;
@@ -29,7 +30,7 @@ if (configIdx >= 0 && configIdx + 1 < argList.Count)
     argList.RemoveRange(configIdx, 2);
 }
 configPath ??= File.Exists("configs/soccernet.yaml") ? "configs/soccernet.yaml" : null;
-var config = PitchWise.Cli.PipelineConfig.Load(configPath);
+var config = PipelineConfig.Load(configPath);
 if (configPath is not null)
     log.LogInformation("Config: {Config}", configPath);
 args = argList.ToArray();

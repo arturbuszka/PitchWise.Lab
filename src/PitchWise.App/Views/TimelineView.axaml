@@ -1,0 +1,40 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:PitchWise.App.Core.ViewModels"
+             xmlns:controls="using:PitchWise.App.Controls"
+             mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="110"
+             x:Class="PitchWise.App.Views.TimelineView"
+             x:DataType="vm:TimelineViewModel">
+
+  <Border Background="#151515" BorderBrush="#333" BorderThickness="0,1,0,0" Padding="16,8">
+    <Grid RowDefinitions="Auto,Auto,Auto">
+
+      <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto">
+        <TextBlock Grid.Column="0" Text="Events" FontWeight="SemiBold" FontSize="12"
+                   VerticalAlignment="Center" />
+
+        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" Margin="16,0"
+                    VerticalAlignment="Center">
+          <CheckBox Content="Passes" IsChecked="{Binding ShowPasses}" FontSize="11" />
+          <CheckBox Content="Turnovers" IsChecked="{Binding ShowTurnovers}" FontSize="11" />
+          <CheckBox Content="Possession" IsChecked="{Binding ShowPossessionChanges}" FontSize="11" />
+        </StackPanel>
+
+        <TextBlock Grid.Column="2" Text="{Binding SummaryText}" FontSize="11" Foreground="#777"
+                   VerticalAlignment="Center" />
+      </Grid>
+
+      <!-- markers laid along the video's duration; click one to seek to it -->
+      <controls:TimelineBar Grid.Row="1" x:Name="Bar" Height="26" Margin="0,8,0,0"
+                            Markers="{Binding Markers}" Selected="{Binding SelectedMarker}"
+                            Playhead="{Binding Playhead}" />
+
+      <TextBlock Grid.Row="2" Margin="0,4,0,0" FontSize="11" Foreground="#999" Height="16"
+                 Text="{Binding SelectedMarker.Label}" TextTrimming="CharacterEllipsis" />
+
+    </Grid>
+  </Border>
+
+</UserControl>

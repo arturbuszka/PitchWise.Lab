@@ -1,0 +1,45 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="using:PitchWise.App.Core.ViewModels"
+        xmlns:views="using:PitchWise.App.Views"
+        mc:Ignorable="d" d:DesignWidth="1400" d:DesignHeight="900"
+        x:Class="PitchWise.App.Views.ShellWindow"
+        x:DataType="vm:ShellViewModel"
+        Title="PitchWise"
+        Width="1400" Height="900"
+        MinWidth="900" MinHeight="600">
+
+  <Grid ColumnDefinitions="360,Auto,*" RowDefinitions="*,Auto">
+
+    <!-- job queue -->
+    <views:JobQueueView Grid.Row="0" Grid.Column="0" DataContext="{Binding Queue}" />
+
+    <GridSplitter Grid.Row="0" Grid.Column="1" Width="4" Background="Transparent"
+                  ResizeDirection="Columns" />
+
+    <!-- content: an open analysis, or the new-analysis form when nothing is open -->
+    <Panel Grid.Row="0" Grid.Column="2">
+
+      <Border Padding="24" IsVisible="{Binding !HasOpenAnalysis}">
+        <views:NewAnalysisView DataContext="{Binding NewAnalysis}" />
+      </Border>
+
+      <Grid RowDefinitions="Auto,*" IsVisible="{Binding HasOpenAnalysis}">
+        <Button Grid.Row="0" Content="✕ Close" HorizontalAlignment="Right" Margin="0,8,12,0"
+                FontSize="11" Padding="10,4" Command="{Binding CloseAnalysisCommand}" />
+        <ContentControl Grid.Row="1" Content="{Binding Analysis}" />
+      </Grid>
+
+    </Panel>
+
+    <!-- status bar -->
+    <Border Grid.Row="1" Grid.ColumnSpan="3" Background="#1a1a1a" Padding="12,6"
+            BorderBrush="#333" BorderThickness="0,1,0,0">
+      <TextBlock Text="{Binding StatusMessage}" FontSize="12" Foreground="#999" />
+    </Border>
+
+  </Grid>
+
+</Window>

@@ -1,11 +1,14 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/PitchWise.App/PitchWise.App.csproj" />
+    <Project Path="src/PitchWise.App.Core/PitchWise.App.Core.csproj" />
     <Project Path="src/PitchWise.Cli/PitchWise.Cli.csproj" />
     <Project Path="src/PitchWise.Engine/PitchWise.Engine.csproj" />
     <Project Path="src/PitchWise.GameState/PitchWise.GameState.csproj" />
     <Project Path="src/PitchWise.Tracking/PitchWise.Tracking.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/PitchWise.App.Core.Tests/PitchWise.App.Core.Tests.csproj" />
     <Project Path="tests/PitchWise.GameState.Tests/PitchWise.GameState.Tests.csproj" />
   </Folder>
 </Solution>

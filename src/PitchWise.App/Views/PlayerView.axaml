@@ -1,0 +1,77 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:PitchWise.App.Core.ViewModels"
+             xmlns:controls="using:PitchWise.App.Controls"
+             mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="760"
+             x:Class="PitchWise.App.Views.PlayerView"
+             x:DataType="vm:PlayerViewModel">
+
+  <Grid RowDefinitions="*,Auto,Auto">
+
+    <!-- the frame itself; the radar is drawn into it by the overlay -->
+    <Border Grid.Row="0" Background="Black">
+      <Panel>
+        <controls:FrameView x:Name="Frame" />
+        <!-- the overlay is keyed by image_id, so an approximate seek can draw a neighbouring
+             frame's players: worth saying rather than letting it look like a tracking bug -->
+        <Border IsVisible="{Binding ShowSeekWarning}" Background="#cc7d3c00"
+                HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,10,0,0"
+                CornerRadius="4" Padding="10,4">
+          <TextBlock Text="Frames deleted — seeking from the video is approximate"
+                     FontSize="11" Foreground="White" />
+        </Border>
+      </Panel>
+    </Border>
+
+    <!-- scrub bar -->
+    <Grid Grid.Row="1" ColumnDefinitions="*,Auto" Margin="16,10,16,0">
+      <Slider Grid.Column="0" Minimum="0" Maximum="{Binding FrameCount}"
+              Value="{Binding CurrentFrame}" TickFrequency="1" IsSnapToTickEnabled="True" />
+      <TextBlock Grid.Column="1" Text="{Binding PositionText}" VerticalAlignment="Center"
+                 Margin="12,0,0,0" FontSize="12" Foreground="#999" FontFamily="Consolas,monospace" />
+    </Grid>
+
+    <!-- transport + overlay toggles -->
+    <Grid Grid.Row="2" ColumnDefinitions="Auto,Auto,*" Margin="16,8,16,14">
+
+      <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+        <Button Content="◀|" Command="{Binding StepBackCommand}" ToolTip.Tip="Previous frame" />
+        <Button Command="{Binding TogglePlayCommand}" MinWidth="44">
+          <Panel>
+            <TextBlock Text="▶" IsVisible="{Binding !IsPlaying}" />
+            <TextBlock Text="❚❚" IsVisible="{Binding IsPlaying}" />
+          </Panel>
+        </Button>
+        <Button Content="|▶" Command="{Binding StepForwardCommand}" ToolTip.Tip="Next frame" />
+
+        <ComboBox ItemsSource="{Binding Rates}" SelectedItem="{Binding Rate}"
+                  MinWidth="70" Margin="8,0,0,0" ToolTip.Tip="Playback speed">
+          <ComboBox.ItemTemplate>
+            <DataTemplate x:DataType="x:Double">
+              <TextBlock Text="{Binding StringFormat='{}{0}×'}" />
+            </DataTemplate>
+          </ComboBox.ItemTemplate>
+        </ComboBox>
+      </StackPanel>
+
+      <Border Grid.Column="1" Width="1" Background="#333" Margin="14,4" />
+
+      <WrapPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+        <CheckBox Content="Pitch" IsChecked="{Binding ShowPitch}" Margin="0,0,10,0" />
+        <CheckBox Content="Players" IsChecked="{Binding ShowEllipses}" Margin="0,0,10,0" />
+        <CheckBox Content="Radar" IsChecked="{Binding ShowRadar}" Margin="0,0,10,0" />
+        <CheckBox Content="GT radar" IsChecked="{Binding ShowGroundTruthRadar}"
+                  IsEnabled="{Binding HasGroundTruth}" Margin="0,0,10,0"
+                  ToolTip.Tip="Ground-truth radar, for SoccerNet jobs" />
+        <CheckBox Content="IDs" IsChecked="{Binding ShowTrackIds}" Margin="0,0,10,0" />
+        <CheckBox Content="Numbers" IsChecked="{Binding ShowJerseyNumbers}" Margin="0,0,10,0" />
+        <CheckBox Content="Roles" IsChecked="{Binding ShowRoles}" />
+      </WrapPanel>
+
+    </Grid>
+
+  </Grid>
+
+</UserControl>

@@ -19,6 +19,42 @@ public static class WorldStateReplay
         IReadOnlyList<GameEvent> Events,
         int FramesReplayed);
 
+    /// <summary>
+    /// Reads the observations back out of a dump, without deriving anything from them.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="Run"/> is the usual entry point; this exists for callers that need to fold the
+    /// same stream through something other than a RuleEngine — MatchStatsCollector, for one — and
+    /// would otherwise have to reimplement this parser.
+    /// </remarks>
+    /// <exception cref="InvalidDataException">The file has no header line.</exception>
+    public static IEnumerable<FrameObservation> ReadObservations(string jsonlPath)
+    {
+        using var reader = new StreamReader(jsonlPath);
+        var sawHeader = false;
+
+        string? line;
+        while ((line = reader.ReadLine()) is not null)
+        {
+            if (line.Length == 0) continue;
+            using JsonDocument doc = JsonDocument.Parse(line);
+            JsonElement root = doc.RootElement;
+
+            if (root.TryGetProperty("type", out JsonElement t) && t.GetString() == "header")
+            {
+                sawHeader = true;
+                continue;
+            }
+            // the header is the first line by construction, so a frame reaching here without one
+            // means this is not a dump at all — fail on the first frame rather than at the end
+            if (!sawHeader)
+                throw new InvalidDataException(
+                    $"{jsonlPath} has no header line; it is not a world_state.jsonl.");
+
+            yield return ParseFrame(root);
+        }
+    }
+
     /// <summary>Runs <paramref name="rules"/> over the dump at <paramref name="jsonlPath"/>.</summary>
     /// <param name="onState">Optional per-frame hook, for dumping the derived state or asserting
     /// on it in tests.</param>

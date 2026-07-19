@@ -22,6 +22,23 @@ public sealed class OfflineTrackingEngine
         _log = log;
     }
 
+    /// <summary>
+    /// Optional progress sink. Null (the default) leaves the engine exactly as it was.
+    /// </summary>
+    /// <remarks>
+    /// Reported from the batch loops, so ticks arrive at frame granularity rather than once per
+    /// module. The engine never marshals threads: an IProgress created on a UI thread does that
+    /// for its owner, and throttling is the caller's business — batches are small and a run can
+    /// report thousands of times.
+    /// </remarks>
+    public IProgress<TrackingProgress>? Progress { get; set; }
+
+    /// <summary>
+    /// Optional cooperative cancellation, checked once per batch so a cancelled run stops within
+    /// one batch rather than at the next module boundary (which can be minutes away).
+    /// </summary>
+    public CancellationToken CancellationToken { get; set; } = CancellationToken.None;
+
     public void TrackDataset()
     {
         foreach (var video in _trackerState.Set.VideoMetadatas.Rows)
@@ -41,20 +58,27 @@ public sealed class OfflineTrackingEngine
 
         var (detections, imagePreds) = _trackerState.Load(videoId);
 
+        var moduleIndex = 0;
+        var moduleCount = _pipeline.Models.Count;
         foreach (var model in _pipeline.Models)
         {
+            CancellationToken.ThrowIfCancellationRequested();
             _log?.LogInformation("Running module {Module}", model.Name);
             var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+            var reporter = new ModuleReporter(this, videoId, model.Name, moduleIndex++, moduleCount);
             switch (model)
             {
                 case VideoLevelModule videoModule:
+                    // atomic: nothing finer than "started"/"finished" exists to report
+                    reporter.Report(0, 1);
                     detections = videoModule.Process(detections, imagePreds);
+                    reporter.Report(1, 1);
                     break;
                 case ImageLevelModule imageModule:
-                    RunImageLevel(imageModule, detections, imagePreds);
+                    RunImageLevel(imageModule, detections, imagePreds, reporter);
                     break;
                 case DetectionLevelModule detectionModule:
-                    RunDetectionLevel(detectionModule, detections, imagePreds);
+                    RunDetectionLevel(detectionModule, detections, imagePreds, reporter);
                     break;
                 default:
                     throw new NotSupportedException($"Unknown module level: {model.Level}");
@@ -68,10 +92,14 @@ public sealed class OfflineTrackingEngine
         return (detections, imagePreds);
     }
 
-    private void RunImageLevel(ImageLevelModule module, DataFrame detections, DataFrame imagePreds)
+    private void RunImageLevel(ImageLevelModule module, DataFrame detections, DataFrame imagePreds,
+        ModuleReporter reporter)
     {
+        long total = imagePreds.Count, done = 0;
+        reporter.Report(done, total);
         foreach (var metaBatch in imagePreds.Rows.Chunk(module.BatchSize))
         {
+            CancellationToken.ThrowIfCancellationRequested();
             var batch = new List<object>(metaBatch.Length);
             foreach (var metadata in metaBatch)
             {
@@ -83,10 +111,12 @@ public sealed class OfflineTrackingEngine
             detections.Merge(output.Detections);
             if (output.ImageMetadatas is not null)
                 imagePreds.Merge(output.ImageMetadatas);
+            reporter.Report(done += metaBatch.Length, total);
         }
     }
 
-    private void RunDetectionLevel(DetectionLevelModule module, DataFrame detections, DataFrame imagePreds)
+    private void RunDetectionLevel(DetectionLevelModule module, DataFrame detections, DataFrame imagePreds,
+        ModuleReporter reporter)
     {
         // detections of one frame are contiguous, so a one-image cache avoids
         // re-reading the same file for every detection
@@ -95,8 +125,11 @@ public sealed class OfflineTrackingEngine
         try
         {
             var rows = detections.Rows.ToList();
+            long total = rows.Count, done = 0;
+            reporter.Report(done, total);
             foreach (var detBatch in rows.Chunk(module.BatchSize))
             {
+                CancellationToken.ThrowIfCancellationRequested();
                 var batch = new List<object>(detBatch.Length);
                 var metas = new List<Series>(detBatch.Length);
                 foreach (var detection in detBatch)
@@ -112,12 +145,21 @@ public sealed class OfflineTrackingEngine
                     batch.Add(module.Preprocess(cachedImage!, detection, metadata));
                 }
                 detections.Merge(module.Process(batch, detections, metas));
+                reporter.Report(done += detBatch.Length, total);
             }
         }
         finally
         {
             cachedImage?.Dispose();
         }
+    }
+
+    /// <summary>Binds the per-module constants so the batch loops only supply the counts.</summary>
+    private readonly struct ModuleReporter(
+        OfflineTrackingEngine engine, long videoId, string moduleName, int moduleIndex, int moduleCount)
+    {
+        public void Report(long done, long total) => engine.Progress?.Report(
+            new TrackingProgress(videoId, moduleName, moduleIndex, moduleCount, done, total));
     }
 
     private static Mat LoadImage(Series metadata)

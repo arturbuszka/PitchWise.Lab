@@ -1,5 +1,4 @@
 using Microsoft.Extensions.Logging;
-using PitchWise.GameState;
 using PitchWise.GameState.Calibration;
 using PitchWise.GameState.Detection;
 using PitchWise.GameState.Jersey;
@@ -12,12 +11,17 @@ using PitchWise.Tracking.Wrappers;
 using YamlDotNet.Serialization;
 using YamlDotNet.Serialization.NamingConventions;
 
-namespace PitchWise.Cli;
+namespace PitchWise.GameState.Configuration;
 
 /// <summary>
 /// .NET counterpart of the Hydra soccernet.yaml: declarative module selection and
 /// hyperparameters. Modules with enabled=auto activate when their ONNX models exist.
 /// </summary>
+/// <remarks>
+/// Lives beside the modules it assembles rather than in any one executable: the module order
+/// is the product, and every consumer (CLI, desktop app, a future streaming backend) needs the
+/// same one. A copy per host would drift.
+/// </remarks>
 public sealed class PipelineConfig
 {
     public string ModelsDir { get; set; } = "pretrained_models";
@@ -93,6 +97,10 @@ public sealed class PipelineConfig
     }
 
     /// <summary>Builds the tracking pipeline for one video resolution.</summary>
+    /// <remarks>
+    /// Sets the static OnnxSessions.Provider/DeviceId as a side effect, so two pipelines with
+    /// different providers must not be built concurrently.
+    /// </remarks>
     public Pipeline BuildPipeline(int imWidth, int imHeight, ILogger? log = null)
     {
         string Model(string name) => Path.Combine(ModelsDir, name);
@@ -111,8 +119,11 @@ public sealed class PipelineConfig
         log?.LogInformation("ONNX provider: {Provider}", OnnxSessions.Provider);
 
         if (!Exists(BboxDetector.Model))
+            // the full path, not the configured one: models_dir is usually relative, and which
+            // directory it resolved against is exactly what is in doubt when this fires
             throw new FileNotFoundException(
-                $"missing {Model(BboxDetector.Model)} — export it with tools/export/export_yolo.py");
+                $"missing {Path.GetFullPath(Model(BboxDetector.Model))} — export it with " +
+                "tools/export/export_yolo.py, or point models_dir at an existing export");
 
         var hasReid = On(Reid.Enabled, Reid.Model);
         var hasCalib = On(Pitch.Enabled, Pitch.KpModel, Pitch.LinesModel)

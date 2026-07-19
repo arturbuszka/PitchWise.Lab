@@ -1,0 +1,92 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:PitchWise.App.Core.ViewModels"
+             mc:Ignorable="d" d:DesignWidth="700" d:DesignHeight="700"
+             x:Class="PitchWise.App.Views.NewAnalysisView"
+             x:DataType="vm:NewAnalysisViewModel">
+
+  <ScrollViewer>
+    <StackPanel Spacing="18" MaxWidth="640" HorizontalAlignment="Left">
+
+      <TextBlock Text="New analysis" FontSize="22" FontWeight="SemiBold" />
+
+      <StackPanel Spacing="6">
+        <TextBlock Text="Source" FontSize="12" Foreground="#999" />
+        <ComboBox ItemsSource="{Binding SourceKinds}" SelectedItem="{Binding SourceKind}"
+                  HorizontalAlignment="Stretch" />
+        <TextBlock Text="{Binding SourceHint}" FontSize="11" Foreground="#777" TextWrapping="Wrap" />
+      </StackPanel>
+
+      <StackPanel Spacing="6">
+        <TextBlock Text="Path" FontSize="12" Foreground="#999" />
+        <Grid ColumnDefinitions="*,Auto">
+          <TextBox Grid.Column="0" Text="{Binding SourcePath}"
+                   PlaceholderText="Choose a video, a frames folder, or a SoccerNet video folder" />
+          <Button Grid.Column="1" Content="Browse…" Margin="8,0,0,0"
+                  Command="{Binding BrowseCommand}" />
+        </Grid>
+      </StackPanel>
+
+      <Expander Header="Pipeline">
+        <StackPanel Spacing="12" Margin="0,10,0,0">
+
+          <StackPanel Spacing="6">
+            <TextBlock Text="Config (yaml)" FontSize="12" Foreground="#999" />
+            <Grid ColumnDefinitions="*,Auto">
+              <TextBox Grid.Column="0" Text="{Binding ConfigPath}"
+                       PlaceholderText="defaults to the built-in pipeline" />
+              <Button Grid.Column="1" Content="Browse…" Margin="8,0,0,0"
+                      Command="{Binding BrowseConfigCommand}" />
+            </Grid>
+          </StackPanel>
+
+          <StackPanel Spacing="6">
+            <TextBlock Text="Models directory" FontSize="12" Foreground="#999" />
+            <Grid ColumnDefinitions="*,Auto">
+              <TextBox Grid.Column="0" Text="{Binding ModelsDir}"
+                       PlaceholderText="defaults to the config's models_dir" />
+              <Button Grid.Column="1" Content="Browse…" Margin="8,0,0,0"
+                      Command="{Binding BrowseModelsCommand}" />
+            </Grid>
+          </StackPanel>
+
+        </StackPanel>
+      </Expander>
+
+      <Expander Header="Limits">
+        <StackPanel Spacing="12" Margin="0,10,0,0">
+
+          <StackPanel Spacing="6">
+            <TextBlock Text="Max frames (0 = all)" FontSize="12" Foreground="#999" />
+            <NumericUpDown Value="{Binding MaxFrames}" Minimum="0" Maximum="1000000"
+                           Increment="10" FormatString="0" />
+          </StackPanel>
+
+          <StackPanel Spacing="6" IsVisible="{Binding IsVideoSource}">
+            <TextBlock Text="Start at (seconds)" FontSize="12" Foreground="#999" />
+            <NumericUpDown Value="{Binding StartSeconds}" Minimum="0" Maximum="100000"
+                           Increment="1" FormatString="0.##" />
+          </StackPanel>
+
+          <StackPanel Spacing="6">
+            <TextBlock Text="Frame rate" FontSize="12" Foreground="#999" />
+            <NumericUpDown Value="{Binding SourceFps}" Minimum="1" Maximum="240"
+                           Increment="1" FormatString="0.##" />
+            <TextBlock Text="Used for image sequences, which record no frame rate of their own."
+                       FontSize="11" Foreground="#777" TextWrapping="Wrap" />
+          </StackPanel>
+
+          <CheckBox Content="Also render an overlay video" IsChecked="{Binding ExportVideo}" />
+
+        </StackPanel>
+      </Expander>
+
+      <Button Content="Queue analysis" Command="{Binding QueueCommand}"
+              HorizontalAlignment="Left" Padding="20,9" FontWeight="SemiBold" />
+
+    </StackPanel>
+  </ScrollViewer>
+
+</UserControl>

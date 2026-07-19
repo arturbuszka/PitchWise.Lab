@@ -1,0 +1,47 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:PitchWise.App.Core.ViewModels"
+             xmlns:views="using:PitchWise.App.Views"
+             mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="800"
+             x:Class="PitchWise.App.Views.AnalysisView"
+             x:DataType="vm:AnalysisViewModel">
+
+  <Grid RowDefinitions="Auto,*">
+
+    <Border Grid.Row="0" Padding="16,10" BorderBrush="#333" BorderThickness="0,0,0,1">
+      <Grid ColumnDefinitions="Auto,*">
+        <TextBlock Grid.Column="0" Text="{Binding Title}" FontSize="16" FontWeight="SemiBold" />
+        <!-- a dump that will not replay costs the timeline, not the video or the stats -->
+        <TextBlock Grid.Column="1" Text="{Binding TimelineError}" Margin="16,0,0,0"
+                   VerticalAlignment="Center" FontSize="11" Foreground="#e67e22"
+                   IsVisible="{Binding TimelineError, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                   TextTrimming="CharacterEllipsis" />
+      </Grid>
+    </Border>
+
+    <!-- video (with its timeline docked under it) left, side panels right -->
+    <Grid Grid.Row="1" ColumnDefinitions="*,Auto,420">
+
+      <Grid Grid.Column="0" RowDefinitions="*,Auto">
+        <views:PlayerView Grid.Row="0" DataContext="{Binding Player}" />
+        <views:TimelineView Grid.Row="1" DataContext="{Binding Timeline}" />
+      </Grid>
+
+      <GridSplitter Grid.Column="1" Width="4" Background="Transparent" ResizeDirection="Columns" />
+
+      <TabControl Grid.Column="2" Padding="0">
+        <TabItem Header="Stats">
+          <views:StatsView DataContext="{Binding Stats}" />
+        </TabItem>
+        <TabItem Header="Debug">
+          <views:DebugView DataContext="{Binding Debug}" />
+        </TabItem>
+      </TabControl>
+
+    </Grid>
+
+  </Grid>
+
+</UserControl>

@@ -1,0 +1,74 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:PitchWise.App.Core.ViewModels"
+             mc:Ignorable="d" d:DesignWidth="360" d:DesignHeight="700"
+             x:Class="PitchWise.App.Views.JobQueueView"
+             x:DataType="vm:JobQueueViewModel">
+
+  <Border Background="#151515" BorderBrush="#333" BorderThickness="0,0,1,0">
+    <Grid RowDefinitions="Auto,*">
+
+      <Border Grid.Row="0" Padding="16,14" BorderBrush="#333" BorderThickness="0,0,0,1">
+        <TextBlock Text="Analyses" FontSize="16" FontWeight="SemiBold" />
+      </Border>
+
+      <ScrollViewer Grid.Row="1">
+        <ItemsControl ItemsSource="{Binding Jobs}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:JobViewModel">
+
+              <Border Padding="16,12" BorderBrush="#282828" BorderThickness="0,0,0,1">
+                <Grid RowDefinitions="Auto,Auto,Auto,Auto" ColumnDefinitions="*,Auto">
+
+                  <TextBlock Grid.Row="0" Grid.Column="0" Text="{Binding DisplayName}"
+                             FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+
+                  <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal" Spacing="4">
+                    <Button Content="Open" FontSize="11" Padding="8,3" FontWeight="SemiBold"
+                            IsVisible="{Binding IsBrowsable}"
+                            Command="{Binding $parent[Window].((vm:ShellViewModel)DataContext).OpenJobCommand}"
+                            CommandParameter="{Binding}" />
+                    <Button Content="Cancel" FontSize="11" Padding="8,3"
+                            IsVisible="{Binding CanCancel}"
+                            Command="{Binding $parent[ItemsControl].((vm:JobQueueViewModel)DataContext).CancelJobCommand}"
+                            CommandParameter="{Binding}" />
+                    <Button Content="Delete" FontSize="11" Padding="8,3"
+                            IsVisible="{Binding !IsRunning}"
+                            Command="{Binding $parent[ItemsControl].((vm:JobQueueViewModel)DataContext).DeleteJobCommand}"
+                            CommandParameter="{Binding}" />
+                    <Button Content="⌫" FontSize="11" Padding="8,3"
+                            IsVisible="{Binding CanDeleteFrames}"
+                            ToolTip.Tip="Delete this job's extracted frames to reclaim disk. Playback then falls back to the source video, whose seeking is approximate."
+                            Command="{Binding $parent[ItemsControl].((vm:JobQueueViewModel)DataContext).DeleteFramesCommand}"
+                            CommandParameter="{Binding}" />
+                  </StackPanel>
+
+                  <TextBlock Grid.Row="1" Grid.ColumnSpan="2" Text="{Binding Subtitle}"
+                             FontSize="11" Foreground="#777" Margin="0,2,0,0" />
+
+                  <ProgressBar Grid.Row="2" Grid.ColumnSpan="2" Margin="0,8,0,0" Height="4"
+                               Minimum="0" Maximum="1" Value="{Binding Fraction}"
+                               IsVisible="{Binding IsRunning}" />
+
+                  <Grid Grid.Row="3" Grid.ColumnSpan="2" Margin="0,6,0,0"
+                        ColumnDefinitions="*,Auto">
+                    <TextBlock Grid.Column="0" FontSize="11" Foreground="#999"
+                               Text="{Binding Detail}" TextTrimming="CharacterEllipsis" />
+                    <TextBlock Grid.Column="1" FontSize="11" Foreground="#666" Margin="8,0,0,0"
+                               Text="{Binding EtaText}" />
+                  </Grid>
+
+                </Grid>
+              </Border>
+
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </ScrollViewer>
+
+    </Grid>
+  </Border>
+
+</UserControl>

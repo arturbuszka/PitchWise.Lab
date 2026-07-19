@@ -1,0 +1,129 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:PitchWise.App.Core.ViewModels"
+             xmlns:tuning="using:PitchWise.App.Core.Tuning"
+             mc:Ignorable="d" d:DesignWidth="420" d:DesignHeight="800"
+             x:Class="PitchWise.App.Views.DebugView"
+             x:DataType="vm:DebugViewModel">
+
+  <TabControl Padding="0">
+
+    <!-- tuning: sliders that re-derive the timeline and stats in milliseconds -->
+    <TabItem Header="Tuning">
+      <Grid RowDefinitions="Auto,*,Auto">
+
+        <Border Grid.Row="0" Padding="12,8" BorderBrush="#333" BorderThickness="0,0,0,1">
+          <Grid ColumnDefinitions="*,Auto">
+            <TextBlock Grid.Column="0" FontSize="11" Foreground="#999" VerticalAlignment="Center"
+                       Text="Replays the recorded observations — no video decode." TextWrapping="Wrap" />
+            <Button Grid.Column="1" Content="Reset" FontSize="11" Padding="10,3"
+                    Command="{Binding ResetConfigCommand}" />
+          </Grid>
+        </Border>
+
+        <ScrollViewer Grid.Row="1" Padding="12">
+          <ItemsControl ItemsSource="{Binding Config.Groups}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="tuning:KnobGroup">
+                <Expander Header="{Binding Name}" IsExpanded="True" Margin="0,0,0,8">
+                  <ItemsControl ItemsSource="{Binding Knobs}" Margin="0,8,0,0">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate x:DataType="tuning:TuningKnob">
+                        <StackPanel Margin="0,0,0,10" ToolTip.Tip="{Binding Description}">
+                          <Grid ColumnDefinitions="*,Auto">
+                            <TextBlock Grid.Column="0" Text="{Binding Name}" FontSize="12" />
+                            <TextBlock Grid.Column="1" Text="{Binding ValueText}" FontSize="12"
+                                       FontFamily="Consolas,monospace" Foreground="#3498db" />
+                          </Grid>
+                          <Slider Minimum="{Binding Minimum}" Maximum="{Binding Maximum}"
+                                  TickFrequency="{Binding Step}" IsSnapToTickEnabled="True"
+                                  Value="{Binding Value}" Margin="0,-4,0,-4" />
+                        </StackPanel>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </Expander>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </ScrollViewer>
+
+        <Border Grid.Row="2" Padding="12,6" BorderBrush="#333" BorderThickness="0,1,0,0">
+          <TextBlock Text="{Binding TuningStatus}" FontSize="11" Foreground="#666" />
+        </Border>
+
+      </Grid>
+    </TabItem>
+
+    <!-- raw detections of the frame on screen -->
+    <TabItem Header="Detections">
+      <Grid RowDefinitions="Auto,*">
+        <TextBlock Grid.Row="0" Text="{Binding FrameSummary}" FontSize="11" Foreground="#999"
+                   Margin="12,8" />
+        <DataGrid Grid.Row="1" ItemsSource="{Binding FrameDetections}" IsReadOnly="True"
+                  GridLinesVisibility="Horizontal" HeadersVisibility="Column" FontSize="11">
+          <DataGrid.Columns>
+            <DataGridTextColumn Header="Track" Width="52"
+                                Binding="{Binding TrackId, x:DataType=vm:DetectionRow}" />
+            <DataGridTextColumn Header="Role" Width="70"
+                                Binding="{Binding Role, x:DataType=vm:DetectionRow}" />
+            <DataGridTextColumn Header="Team" Width="50"
+                                Binding="{Binding Team, x:DataType=vm:DetectionRow}" />
+            <DataGridTextColumn Header="#" Width="40"
+                                Binding="{Binding Jersey, x:DataType=vm:DetectionRow}" />
+            <DataGridTextColumn Header="Conf" Width="48"
+                                Binding="{Binding Confidence, x:DataType=vm:DetectionRow}" />
+            <DataGridTextColumn Header="Pitch" Width="100"
+                                Binding="{Binding Pitch, x:DataType=vm:DetectionRow}" />
+            <DataGridTextColumn Header="Bbox" Width="*"
+                                Binding="{Binding Bbox, x:DataType=vm:DetectionRow}" />
+          </DataGrid.Columns>
+        </DataGrid>
+      </Grid>
+    </TabItem>
+
+    <!-- tracklets: one row per track, with a jump to where it starts -->
+    <TabItem Header="Tracklets">
+      <DataGrid ItemsSource="{Binding Tracklets}" IsReadOnly="True" FontSize="11"
+                GridLinesVisibility="Horizontal" HeadersVisibility="Column"
+                CanUserSortColumns="True"
+                DoubleTapped="OnTrackletDoubleTapped">
+        <DataGrid.Columns>
+          <DataGridTextColumn Header="Track" Width="60"
+                              Binding="{Binding Label, x:DataType=vm:TrackletSummary}" />
+          <DataGridTextColumn Header="Team" Width="52"
+                              Binding="{Binding Team, x:DataType=vm:TrackletSummary}" />
+          <DataGridTextColumn Header="Role" Width="72"
+                              Binding="{Binding Role, x:DataType=vm:TrackletSummary}" />
+          <DataGridTextColumn Header="Frames" Width="80"
+                              Binding="{Binding Span, x:DataType=vm:TrackletSummary}" />
+          <DataGridTextColumn Header="Dets" Width="*"
+                              Binding="{Binding Detections, x:DataType=vm:TrackletSummary}" />
+        </DataGrid.Columns>
+      </DataGrid>
+    </TabItem>
+
+    <!-- what the run actually did -->
+    <TabItem Header="Run">
+      <ScrollViewer Padding="12">
+        <StackPanel Spacing="12">
+          <StackPanel Spacing="4">
+            <TextBlock Text="Pipeline" FontWeight="SemiBold" FontSize="12" />
+            <TextBlock Text="{Binding PipelineDescription}" FontSize="11" Foreground="#999"
+                       TextWrapping="Wrap" FontFamily="Consolas,monospace" />
+          </StackPanel>
+          <StackPanel Spacing="4">
+            <TextBlock Text="Log" FontWeight="SemiBold" FontSize="12" />
+            <TextBox Text="{Binding Log}" IsReadOnly="True" AcceptsReturn="True"
+                     FontFamily="Consolas,monospace" FontSize="10" MinHeight="300"
+                     TextWrapping="NoWrap" />
+          </StackPanel>
+        </StackPanel>
+      </ScrollViewer>
+    </TabItem>
+
+  </TabControl>
+
+</UserControl>

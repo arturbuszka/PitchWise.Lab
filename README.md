@@ -46,9 +46,15 @@ PyTorch weights must be exported to ONNX once (scripts under `tools/export`).
 ## Structure
 
 - `src/PitchWise.Tracking` — tracking-framework core (port of `tracklab`)
-- `src/PitchWise.GameState` — football modules (port of `sn_gamestate`)
+- `src/PitchWise.GameState` — football modules (port of `sn_gamestate`) + `PipelineConfig`
 - `src/PitchWise.Engine` — dependency-free football rule/world-state engine
-- `src/PitchWise.Cli` — entry point (equivalent of `tracklab -cn soccernet`)
+- `src/PitchWise.Cli` — command-line entry point (equivalent of `tracklab -cn soccernet`)
+- `src/PitchWise.App.Core` — desktop view-models, workspace and playback (no UI framework)
+- `src/PitchWise.App` — Avalonia desktop app
+
+`PitchWise.Cli` and `PitchWise.App` are peers: both are composition roots over the same libraries,
+neither references the other, and the pipeline they assemble comes from the one `PipelineConfig` in
+`PitchWise.GameState`.
 
 StrongSORT tracking is provided by the separate MIT-licensed
 [StrongSort.Net](https://github.com/arturbuszka/StrongSort.NET) package, referenced via NuGet.
@@ -72,3 +78,37 @@ flag to switch). Modules with `enabled: auto` turn on when their ONNX models are
 `track` assembles the pipeline from the modules whose models are available: `yolo11m.onnx` (required) →
 `prtreid-soccernet-baseline.onnx` (teams / roles) → StrongSORT → `nbjw_kp/lines.onnx`
 (homography + minimap) → `mmocr_det/rec.onnx` (numbers). Export: `tools/export/*.py`.
+
+## Desktop app
+
+An internal tool for watching, debugging and tuning the analysis: queue a video, watch it run, then
+browse the result.
+
+```
+dotnet run --project src/PitchWise.App
+```
+
+Pick a source, queue it, and open the job once it finishes:
+
+- **Frame sequence** — a folder of numbered images, used in place (no copy). This is what the
+  SoccerNet data is: `data/SoccerNetGS/valid/SNGS-021/img1`.
+- **Video file** — frames are extracted into the job's own folder.
+- **SoccerNet video** — a video folder with `Labels-GameState.json`; also loads ground truth, which
+  enables the comparison radar.
+
+Four panels over one analysis: the video with the overlay and radar (each layer toggleable), an event
+timeline whose markers seek to the frame, match statistics, and a debug/tuning tab with the raw
+detections, a tracklet inspector, the job log, and sliders over every `EngineConfig` threshold that
+re-derive the timeline and stats in milliseconds.
+
+Jobs live in `%LOCALAPPDATA%\PitchWise\workspaces\`, one self-describing folder each (`manifest.json`
+plus artifacts), so discovery is a directory scan and a job survives being copied elsewhere.
+
+Two things worth knowing:
+
+- **Playback reads the frames on disk, not the video.** Seeking an H.264 file lands on the nearest
+  keyframe, and since the overlay is keyed by `image_id`, an approximate seek would draw the wrong
+  players. Deleting a job's frames reclaims the disk and falls back to the video, which the player
+  labels as approximate.
+- **Analysis runs one job at a time**, because `PipelineConfig.BuildPipeline` sets the static ONNX
+  provider. The GPU is the bottleneck anyway.

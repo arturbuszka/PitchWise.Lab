@@ -9,6 +9,9 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.AI.DirectML" Version="1.15.4" />
     <PackageReference Include="Microsoft.ML.OnnxRuntime.DirectML" Version="1.24.4" />
+    <!-- PipelineConfig lives here so every host (CLI, desktop, a future streaming
+         backend) assembles the pipeline from the same declarative config. -->
+    <PackageReference Include="YamlDotNet" Version="18.1.0" />
   </ItemGroup>
 
   <ItemGroup>
