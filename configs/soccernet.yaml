@@ -3,8 +3,9 @@
 models_dir: pretrained_models
 
 onnx:
-  provider: dml   # cpu | dml (DirectML — any DX12 GPU on Windows, no install needed)
-  device_id: 1    # hybrid-graphics laptops: 0 is often the integrated GPU, 1 the discrete one
+  provider: cuda   # cpu | dml (DirectML — any DX12 GPU on Windows, no install needed)
+  device_id: 0    # CUDA: index among NVIDIA GPUs only (0 = first). DirectML on hybrid laptops: 0 is often the integrated GPU, 1 the discrete one
+  low_vram: true  # CUDA on <= 6 GB GPUs: release arena memory between runs (avoids OOM); set false on bigger GPUs
 
 bbox_detector:
   model: yolo11m.onnx

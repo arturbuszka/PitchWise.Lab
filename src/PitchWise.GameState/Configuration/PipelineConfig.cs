@@ -37,6 +37,8 @@ public sealed class PipelineConfig
     {
         public string Provider { get; set; } = "cpu";
         public int DeviceId { get; set; }
+        /// <summary>CUDA on small GPUs (≤ 6 GB): release arena memory between runs, see OnnxSessions.LowVram.</summary>
+        public bool LowVram { get; set; }
     }
 
     public sealed class DetectorConfig
@@ -120,6 +122,7 @@ public sealed class PipelineConfig
             _ => OnnxProvider.Cpu,
         };
         OnnxSessions.DeviceId = Onnx.DeviceId;
+        OnnxSessions.LowVram = Onnx.LowVram;
         OnnxSessions.Log = log;
         log?.LogInformation("ONNX provider: {Provider}", OnnxSessions.Provider);
 

@@ -14,6 +14,7 @@ using PitchWise.GameState.Track;
 using PitchWise.GameState.Visualization;
 using PitchWise.Tracking.Datastruct;
 using PitchWise.Tracking.Engine;
+using PitchWise.Tracking.Eval;
 using PitchWise.Tracking.Pipeline;
 using PitchWise.Tracking.Wrappers;
 
@@ -28,6 +29,14 @@ if (configIdx >= 0 && configIdx + 1 < argList.Count)
 {
     configPath = argList[configIdx + 1];
     argList.RemoveRange(configIdx, 2);
+}
+// --dump <file.json>: eval writes its metrics and the evaluated detections there (for eval-combine)
+string? dumpPath = null;
+var dumpIdx = argList.IndexOf("--dump");
+if (dumpIdx >= 0 && dumpIdx + 1 < argList.Count)
+{
+    dumpPath = argList[dumpIdx + 1];
+    argList.RemoveRange(dumpIdx, 2);
 }
 configPath ??= File.Exists("configs/soccernet.yaml") ? "configs/soccernet.yaml" : null;
 var config = PipelineConfig.Load(configPath);
@@ -49,6 +58,7 @@ return args switch
     ["eval", var dataset, var split, var video, .. var rest] => Eval(dataset, split, video,
         rest.Length > 0 ? rest[0] : null,
         rest.Length > 1 ? int.Parse(rest[1]) : 0),
+    ["eval-combine", var output, .. var inputs] when inputs.Length > 0 => EvalCombine(output, inputs),
     _ => Usage(),
 };
 
@@ -60,6 +70,8 @@ int Usage()
           track <video.mp4> <out.mp4> [models_dir] [max_frames] [start_seconds]  run the pipeline on any video
           stats <video.mp4> <out.json> [models_dir] [max_frames] [start_seconds] run the pipeline + collect match statistics
           eval <dataset_path> <split> <video_name> [models_dir] [max_frames]     run pipeline + GS-HOTA vs ground truth
+                                                                        (--dump <file.json> saves metrics + detections)
+          eval-combine <out.json> <dump.json>...   GS-HOTA over several eval dumps, combined like TrackEval
         """);
     return 1;
 }
@@ -217,6 +229,60 @@ int Eval(string datasetPath, string split, string videoName, string? modelsDir, 
     Console.WriteLine($"  full (role+team+jersey): HOTA={full.Hota:P1}  DetA={full.DetA:P1}  AssA={full.AssA:P1}  LocA={full.LocA:P1}");
     Console.WriteLine($"  without jersey numbers:  HOTA={noJersey.Hota:P1}  DetA={noJersey.DetA:P1}  AssA={noJersey.AssA:P1}");
     Console.WriteLine($"  position only:           HOTA={positionOnly.Hota:P1}  DetA={positionOnly.DetA:P1}  AssA={positionOnly.AssA:P1}");
+
+    if (dumpPath is not null)
+    {
+        var dump = new EvalDump(videoName, imageIds.Count, full, noJersey, positionOnly, imageIds, gtFrames, predFrames);
+        File.WriteAllText(dumpPath, JsonSerializer.Serialize(dump));
+        log.LogInformation("Eval dump written to {Path}", dumpPath);
+    }
+    return 0;
+}
+
+// Combined GS-HOTA over several sequences, as TrackEval's combine_sequences: evaluating the
+// concatenated frames with per-sequence identity spaces sums TP/FN/FP per alpha and weights
+// AssA/LocA by TP — the same aggregation, without touching the metric.
+int EvalCombine(string output, string[] inputs)
+{
+    var dumps = inputs.Select(f => JsonSerializer.Deserialize<EvalDump>(File.ReadAllText(f))!).ToList();
+    var gtFrames = new List<IReadOnlyList<GsDetection>>();
+    var predFrames = new List<IReadOnlyList<GsDetection>>();
+    for (var s = 0; s < dumps.Count; s++)
+    {
+        var offset = (s + 1) * 1_000_000_000L;
+        gtFrames.AddRange(dumps[s].Gt.Select(f => (IReadOnlyList<GsDetection>)f.Select(d => d with { TrackId = offset + d.TrackId }).ToList()));
+        predFrames.AddRange(dumps[s].Pred.Select(f => (IReadOnlyList<GsDetection>)f.Select(d => d with { TrackId = offset + d.TrackId }).ToList()));
+    }
+    var full = GsHota.Evaluate(gtFrames, predFrames);
+    var noJersey = GsHota.Evaluate(gtFrames, predFrames, new GsHotaOptions { UseJerseyNumbers = false });
+    var positionOnly = GsHota.Evaluate(gtFrames, predFrames,
+        new GsHotaOptions { UseJerseyNumbers = false, UseTeams = false, UseRoles = false });
+
+    Console.WriteLine($"GS-HOTA combined ({dumps.Count} sequences, {gtFrames.Count} frames)");
+    Console.WriteLine($"  full (role+team+jersey): HOTA={full.Hota:P1}  DetA={full.DetA:P1}  AssA={full.AssA:P1}  LocA={full.LocA:P1}");
+    Console.WriteLine($"  without jersey numbers:  HOTA={noJersey.Hota:P1}  DetA={noJersey.DetA:P1}  AssA={noJersey.AssA:P1}");
+    Console.WriteLine($"  position only:           HOTA={positionOnly.Hota:P1}  DetA={positionOnly.DetA:P1}  AssA={positionOnly.AssA:P1}");
+    File.WriteAllText(output, JsonSerializer.Serialize(new { Full = full, NoJersey = noJersey, PositionOnly = positionOnly }));
+
+    // markdown table next to the json: one row per sequence, arithmetic mean, combined
+    static string Pct(double v) => (100 * v).ToString("F1", System.Globalization.CultureInfo.InvariantCulture);
+    static string Row(string name, string frames, HotaResult f, HotaResult n, HotaResult p) =>
+        $"| {name} | {frames} | {Pct(f.Hota)} | {Pct(f.DetA)} | {Pct(f.AssA)} | {Pct(f.LocA)} " +
+        $"| {Pct(n.Hota)} | {Pct(n.DetA)} | {Pct(n.AssA)} | {Pct(p.Hota)} | {Pct(p.DetA)} | {Pct(p.AssA)} |";
+    static HotaResult Mean(IEnumerable<HotaResult> rs) => new()
+    {
+        Hota = rs.Average(r => r.Hota), DetA = rs.Average(r => r.DetA),
+        AssA = rs.Average(r => r.AssA), LocA = rs.Average(r => r.LocA), HotaPerAlpha = [],
+    };
+    var md = new System.Text.StringBuilder();
+    md.AppendLine("| sekwencja | klatki | pełny HOTA | pełny DetA | pełny AssA | pełny LocA | bez nr HOTA | bez nr DetA | bez nr AssA | pozycja HOTA | pozycja DetA | pozycja AssA |");
+    md.AppendLine("|---|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|");
+    foreach (var d in dumps)
+        md.AppendLine(Row(d.Video, d.Frames.ToString(), d.Full, d.NoJersey, d.PositionOnly));
+    md.AppendLine(Row("**średnia sekwencji**", "", Mean(dumps.Select(d => d.Full)),
+        Mean(dumps.Select(d => d.NoJersey)), Mean(dumps.Select(d => d.PositionOnly))));
+    md.AppendLine(Row("**łącznie (jak TrackEval)**", gtFrames.Count.ToString(), full, noJersey, positionOnly));
+    File.WriteAllText(Path.ChangeExtension(output, ".md"), md.ToString());
     return 0;
 }
 
@@ -247,3 +313,6 @@ static PitchWise.Tracking.Datastruct.TrackingSet TrimSet(PitchWise.Tracking.Data
         DetectionsGt = set.DetectionsGt.Where(d => keptIds.Contains(d.Get<long>("image_id"))),
     };
 }
+
+record EvalDump(string Video, int Frames, HotaResult Full, HotaResult NoJersey, HotaResult PositionOnly,
+    List<long> ImageIds, List<IReadOnlyList<GsDetection>> Gt, List<IReadOnlyList<GsDetection>> Pred);

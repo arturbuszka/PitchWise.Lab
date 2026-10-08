@@ -112,7 +112,7 @@ public sealed class MmocrOnnx : DetectionLevelModule, IDisposable
         using var resized = crop.Resize(new Size(w, h));
 
         var input = ToNormalizedTensor(resized, ImageNetMean, ImageNetStd);
-        using var outputs = _det.Run(new[] { NamedOnnxValue.CreateFromTensor(_det.InputMetadata.Keys.First(), input) });
+        using var outputs = OnnxSessions.Run(_det, new[] { NamedOnnxValue.CreateFromTensor(_det.InputMetadata.Keys.First(), input) });
         var probMap = outputs.First().AsTensor<float>();
 
         // output can be [1, 1, H, W] or [1, H, W]
@@ -145,7 +145,7 @@ public sealed class MmocrOnnx : DetectionLevelModule, IDisposable
 
         // mmocr recognizers normalize with mean/std 127.5
         var input = ToNormalizedTensor(padded, new[] { 0.5f, 0.5f, 0.5f }, new[] { 0.5f, 0.5f, 0.5f });
-        using var outputs = _rec.Run(new[] { NamedOnnxValue.CreateFromTensor(_rec.InputMetadata.Keys.First(), input) });
+        using var outputs = OnnxSessions.Run(_rec, new[] { NamedOnnxValue.CreateFromTensor(_rec.InputMetadata.Keys.First(), input) });
         var logits = outputs.First().AsTensor<float>(); // [1, T, C]
 
         int steps = logits.Dimensions[1], classes = logits.Dimensions[2];
