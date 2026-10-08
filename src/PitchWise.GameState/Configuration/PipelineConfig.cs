@@ -113,9 +113,14 @@ public sealed class PipelineConfig
                 _ => Exists(models),
             };
 
-        OnnxSessions.Provider = Onnx.Provider.ToLowerInvariant() is "dml" or "directml"
-            ? OnnxProvider.DirectML : OnnxProvider.Cpu;
+        OnnxSessions.Provider = Onnx.Provider.ToLowerInvariant() switch
+        {
+            "dml" or "directml" => OnnxProvider.DirectML,
+            "cuda" => OnnxProvider.Cuda,
+            _ => OnnxProvider.Cpu,
+        };
         OnnxSessions.DeviceId = Onnx.DeviceId;
+        OnnxSessions.Log = log;
         log?.LogInformation("ONNX provider: {Provider}", OnnxSessions.Provider);
 
         if (!Exists(BboxDetector.Model))
