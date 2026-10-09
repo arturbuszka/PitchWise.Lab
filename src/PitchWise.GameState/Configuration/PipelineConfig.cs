@@ -32,6 +32,7 @@ public sealed class PipelineConfig
     public PitchConfig Pitch { get; set; } = new();
     public CalibrationConfig Calibration { get; set; } = new();
     public JerseyConfig Jersey { get; set; } = new();
+    public TeamConfig Team { get; set; } = new();
 
     public sealed class OnnxConfig
     {
@@ -87,6 +88,20 @@ public sealed class PipelineConfig
         public string Charset { get; set; } = "mmocr_charset.txt";
     }
 
+    public sealed class TeamConfig
+    {
+        /// <summary>What tracklets are split into teams by: "color" (jersey colour, TorsoColor) or
+        /// "embedding" (mean ReID embedding, as the Python sn-gamestate).</summary>
+        public string Feature { get; set; } = "color";
+
+        public TeamFeature ParsedFeature => Feature.ToLowerInvariant() switch
+        {
+            "color" or "colour" => TeamFeature.Color,
+            "embedding" or "embeddings" or "reid" => TeamFeature.Embedding,
+            _ => throw new ArgumentException($"team.feature: unknown value '{Feature}' (expected color or embedding)"),
+        };
+    }
+
     public static PipelineConfig Load(string? path)
     {
         if (path is null || !File.Exists(path))
@@ -120,6 +135,9 @@ public sealed class PipelineConfig
             [nameof(NbjwCalibKeypoints)] = Fingerprint(Pitch, Pitch.KpModel, Pitch.LinesModel),
             [nameof(NbjwCalib)] = Fingerprint(Calibration),
             [nameof(MmocrOnnx)] = Fingerprint(Jersey, Jersey.DetModel, Jersey.RecModel, Jersey.Charset),
+            // no settings: the entry only makes a cache saved before the module existed count as stale
+            [nameof(TorsoColor)] = Fingerprint(new { }),
+            [nameof(TrackletTeamClustering)] = Fingerprint(Team),
         };
     }
 
@@ -168,8 +186,11 @@ public sealed class PipelineConfig
             new YoloOnnxDetector(Model(BboxDetector.Model), BboxDetector.MinConfidence,
                 inputSize: BboxDetector.InputSize),
         };
+        var teamFeature = Team.ParsedFeature;
         if (hasReid)
             modules.Add(new PrtReidOnnx(Model(Reid.Model), Reid.BatchSize));
+        if (hasReid && teamFeature == TeamFeature.Color)
+            modules.Add(new TorsoColor());
         modules.Add(new StrongSortModule(new StrongSortOptions
         {
             EmaAlpha = Track.EmaAlpha,
@@ -195,7 +216,7 @@ public sealed class PipelineConfig
             modules.Add(new MajorityVoteTracklet(voteAttributes.ToArray()));
         if (hasReid)
         {
-            modules.Add(new TrackletTeamClustering());
+            modules.Add(new TrackletTeamClustering(teamFeature));
             if (hasCalib)
                 modules.Add(new TrackletTeamSideLabeling());
         }

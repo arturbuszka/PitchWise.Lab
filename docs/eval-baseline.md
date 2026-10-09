@@ -258,3 +258,68 @@ Z cache biegu `20261008-215833` (`FROM_CACHE`, `RERUN=StrongSortModule`). Wynik 
   (np. przy 30: 57.9→62.8, 50.5→54.6, 60.3→61.5, 38.1→43.5, 45.4→46.1). Pozostałe parametry nie dają spójnej poprawy.
 - Mimo to fragmentacja zostaje (AssA ok. 42%). Parametry jej nie rozwiązują.
 - Domyślny config nie został zmieniony. Wynik na 5 strojonych sekwencjach trzeba potwierdzić na innych.
+
+### Diagnoza: drużyny i strony (2026-10-09)
+
+Analiza offline w Pythonie na cache biegu `20261008-215833` i zrzutach biegów z tabeli wyżej. Kod pipeline'u bez zmian.
+Port (`TrackletTeamClustering`, `TrackletTeamSideLabeling`) jest wierny oryginałowi: KMeans (k=2) na średnich embeddingach ReID torów `player`,
+potem klaster o większej średniej x detekcji to „right”. Bramkarze dostają stronę według połowy boiska (to działa: 100% zgodności).
+
+**1. Zamianę stron powoduje domieszka w klastrach, a nie sama reguła średniego x ani kalibracja.**
+- SNGS-022: klastry dzielą drużyny w 80% (przy właściwym mapowaniu), ale klaster „left” zawiera 18 torów drużyny prawej.
+  To przesuwa jego średnią x i odwraca decyzję przy marginesie 1.2 m. Przy czystych klastrach te same przewidziane pozycje dają poprawny margines +5.5 m.
+- Reguła średniego x jest z natury słaba: na GT wszystkich 58 sekwencji valid (idealne klastry, idealne pozycje) różnica średnich drużyn to typowo 2–6 m.
+  Myli się w 2 z 58 sekwencji (SNGS-038, SNGS-092), a SNGS-056 wychodzi na granicy 0.0 m. Mimo to jest najlepsza z testowanych (mediana, średnia przycięta,
+  głosowanie klatkami, kwantyle, skrajny zawodnik). Ma największy margines względem bootstrapu.
+- SNGS-079 (67%) to nie zamiana stron, tylko słaba klasteryzacja: 62% czystości.
+
+**2. „`max_age 30` psuje SNGS-028” to zdegenerowany KMeans, a nie zamiana stron.** Jeden klaster dostaje 1 tor (405 detekcji, z czego 402 to bramkarz z GT
+sklasyfikowany jako `player`), drugi 76 torów. W 110 parach bieg×sekwencja zdarza się to 10 razy. Pozostałe przypadki to klaster z 1–3 torów po 1–3 detekcje.
+Na tych samych torach sklearnowy KMeans się nie degeneruje (88%). Winna jest inicjalizacja w C#: zwykły k-means++ z `Random(0)` i jeden start.
+sklearn używa greedy k-means++.
+
+**3. Embedding ReID słabo koduje drużynę. Kolor koszulki dużo lepiej.** Czystość klastrów (dopasowanie do GT po IoU w obrazie, sklearn KMeans, 5 ziaren):
+
+| cecha toru | 022 | 028 | 038 | 079 | 086 | poprawna drużyna (z regułą strony) | złe strony |
+|---|--:|--:|--:|--:|--:|--:|--:|
+| embedding ReID, 1 start (jak teraz) | 74% | 94% | 89% | 62% | 75% | 69.2% | 5/25 |
+| embedding ReID, 10 startów | 93% | 94% | 91% | 62% | 80% | 84.0% | 0/25 |
+| kolor tułowia (mediana Lab, bez trawy), 10 startów | 91% | 94% | 97% | 88% | 93% | **92.7%** | 0/25 |
+
+Kolor tułowia: wycinek 25–75% szerokości i 15–50% wysokości boxa, piksele trawy odrzucone (HSV: H 35–85, S > 60), mediana Lab z co 3. klatki,
+mediana po torze, standaryzacja, KMeans k=2.
+Sprawdzenie przeciw przeuczeniu na GT (boxy i tory z GT, wszystkie 58 sekwencji valid, 10 startów): czystość średnio 96.1%, mediana 100%,
+6 sekwencji poniżej 80%. Strona zła w 3 sekwencjach: 038 i 092 to granica reguły średniego x, 056 przy czystości 83%.
+
+**Symulowany wpływ na GS-HOTA** (podmienione tylko etykiety drużyn w zrzutach baseline'u, reguła strony bez zmian, przeliczone `eval-combine`):
+
+| wariant | pełny | bez nr | pozycja | bez nr per sekwencja (022/028/038/079/086) |
+|---|--:|--:|--:|---|
+| baseline | 31.9 | 40.5 | 50.3 | 26.4 / 44.1 / 57.8 / 28.1 / 43.4 |
+| embedding, 10 startów | 33.6 | 44.8 | 50.3 | 56.2 / 44.3 / 57.8 / 26.9 / 39.7 |
+| kolor tułowia, 10 startów | **35.0** | **48.3** | 50.3 | 55.9 / 44.3 / 60.0 / 36.2 / 44.6 |
+
+Same 10 startów pogarsza 079 i 086. Kolor poprawia albo nie zmienia każdej sekwencji.
+
+### Drużyny po kolorze koszulki — wdrożone (2026-10-09)
+
+Nowy moduł `TorsoColor` (poziom detekcji, bez modelu, ok. 0.01 s/klatkę) liczy kolumnę `torso_color` tak samo jak wyżej, ale z każdej klatki.
+`TrackletTeamClustering` ma parametr `team.feature` w configu:
+- `color` (nowy domyślny): mediana `torso_color` po torze, standaryzacja, KMeans k=2 z 10 startami (najmniejsza inercja);
+- `embedding`: zachowanie jak dotąd (średni embedding ReID, 1 start). Daje zrzuty bit w bit identyczne z baseline'em (sprawdzone na 5 sekwencjach).
+
+Reguła strony (`TrackletTeamSideLabeling`) bez zmian. Cache zapisany przed tą zmianą wymaga `RERUN=TorsoColor`; bez tego bieg kończy się błędem o nieaktualnym cache.
+Pomiar z cache `20261008-215833`, wynik łączny:
+
+| config | pełny HOTA | bez nr HOTA | bez nr DetA | pozycja HOTA | bez nr per sekwencja (022/028/038/079/086) |
+|---|--:|--:|--:|--:|---|
+| baseline (`embedding`, `max_age 300`) | 31.9 | 40.5 | 44.5 | 50.3 | 26.4 / 44.1 / 57.8 / 28.1 / 43.4 |
+| **`color`, `max_age 300`** (run `20261009-112413`) | **35.0** | **48.3** | **59.9** | 50.3 | 55.9 / 44.3 / 60.0 / 36.3 / 44.6 |
+| `embedding`, `max_age 30` (run `20261009-021506`) | 33.2 | 43.5 | 45.0 | 53.2 | 61.5 / 26.3 / 59.1 / 33.3 / 34.8 |
+| `color`, `max_age 30` (run `20261009-112725`) | 37.0 | 51.8 | 63.2 | 53.2 | 61.3 / 49.3 / 61.2 / 42.2 / 46.0 |
+
+- Wynik C# pokrywa się z symulacją w Pythonie (35.0 / 48.3 / 50.3).
+- Przy kolorze drużyny nie zależą już od drobnych zmian w trackerze: `max_age 30` nie psuje 028 ani 086. Warianty „pełny” i „bez numerów”
+  znów nadają się do oceny zmian w trackingu.
+- Zostaje: granica reguły średniego x (na GT źle w 038 i 092) i bramkarz rozpoznany jako `player` (028, problem roli).
+- Potwierdzenie poza 5 sekwencjami jest na razie tylko na boxach z GT (58 sekwencji, sekcja wyżej). Pełny bieg na innych sekwencjach jeszcze nie był robiony.

@@ -40,3 +40,6 @@ jersey:
   det_model: mmocr_det.onnx
   rec_model: mmocr_rec.onnx
   charset: mmocr_charset.txt
+
+team:
+  feature: color   # color (jersey colour, TorsoColor) | embedding (mean ReID embedding, as the Python sn-gamestate)
