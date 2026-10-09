@@ -49,17 +49,39 @@ public class GsHotaTests
     }
 
     [Fact]
+    public void Sigma_FollowsTheOfficialFiveMeterTolerance()
+    {
+        // sn-trackeval: EVAL_DIST_TOL = 5 -> similarity drops to 0.05 at 5 m
+        var sigma = new GsHotaOptions().Sigma;
+        Assert.Equal(2.0427, sigma, 4);
+        Assert.Equal(0.05, GsHota.Similarity(Player(1, 0, 0), Player(1, 5, 0), new GsHotaOptions()), 6);
+    }
+
+    [Fact]
     public void PositionError_DegradesSimilarityWithGaussianKernel()
     {
-        // 2.5 m error with sigma 2.5 -> sim = exp(-0.5) ~= 0.6065:
-        // matched for alphas below 0.6065 (12 of 19), unmatched above.
+        // 2.5 m error -> sim = exp(-0.5 * (2.5 / sigma)^2) ~= 0.473:
+        // matched for alphas up to that value, unmatched above.
         var gt = Frames(new[] { Player(1, 0, 0) });
         var pred = Frames(new[] { Player(1, 2.5, 0) });
         var result = GsHota.Evaluate(gt, pred);
 
-        var expectedMatchedAlphas = PitchWise.Tracking.Eval.Hota.Alphas.Count(a => 0.6065 >= a - 1e-10);
+        var sigma = new GsHotaOptions().Sigma;
+        var similarity = Math.Exp(-0.5 * Math.Pow(2.5 / sigma, 2));
+        var expectedMatchedAlphas = PitchWise.Tracking.Eval.Hota.Alphas.Count(a => similarity >= a - 1e-10);
         var expectedHota = (double)expectedMatchedAlphas / PitchWise.Tracking.Eval.Hota.Alphas.Length;
         Assert.Equal(expectedHota, result.Hota, 3);
+    }
+
+    [Fact]
+    public void GoalkeeperJersey_IsIgnored_ButTeamStillCounts()
+    {
+        // official metric: jersey only for role == player; team for players and goalkeepers
+        var gt = Frames(new[] { new GsDetection(1, 0, 0, "goalkeeper", "left", "1") });
+        var wrongJersey = Frames(new[] { new GsDetection(1, 0, 0, "goalkeeper", "left", "12") });
+        var wrongTeam = Frames(new[] { new GsDetection(1, 0, 0, "goalkeeper", "right", "1") });
+        Assert.Equal(1.0, GsHota.Evaluate(gt, wrongJersey).Hota, 6);
+        Assert.Equal(0.0, GsHota.Evaluate(gt, wrongTeam).Hota, 6);
     }
 
     [Fact]

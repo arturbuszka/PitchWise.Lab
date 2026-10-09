@@ -8,19 +8,25 @@ public sealed record GsDetection(long TrackId, double X, double Y,
 
 public sealed record GsHotaOptions
 {
-    /// <summary>Sigma of the gaussian similarity kernel on pitch distance (meters).</summary>
-    public double Sigma { get; init; } = 2.5;
+    /// <summary>Sigma of the gaussian similarity kernel on pitch distance (meters). The official
+    /// metric derives it from a 5 m distance tolerance (EVAL_DIST_TOL), i.e. ~2.04 m.</summary>
+    public double Sigma { get; init; } = SigmaForTolerance(5.0);
     /// <summary>Role must match for a valid GT/pred pair.</summary>
     public bool UseRoles { get; init; } = true;
     /// <summary>Team must match — only enforced for players and goalkeepers.</summary>
     public bool UseTeams { get; init; } = true;
-    /// <summary>Jersey number must match — only enforced for players and goalkeepers.</summary>
+    /// <summary>Jersey number must match — only enforced for players (not goalkeepers).</summary>
     public bool UseJerseyNumbers { get; init; } = true;
+
+    /// <summary>Sigma whose kernel drops to 0.05 at <paramref name="tolerance"/> meters
+    /// (sn-trackeval calculate_sigma).</summary>
+    public static double SigmaForTolerance(double tolerance)
+        => Math.Sqrt(tolerance * tolerance / (-2 * Math.Log(0.05)));
 }
 
 /// <summary>
 /// GS-HOTA — the SoccerNet Game State Reconstruction metric: HOTA evaluated on pitch
-/// coordinates with a gaussian similarity kernel (sigma 2.5 m) instead of IoU, where
+/// coordinates with a gaussian similarity kernel (5 m tolerance, sigma ~2.04 m) instead of IoU, where
 /// pairs disagreeing on role/team/jersey get zero similarity and cannot be matched.
 /// </summary>
 public static class GsHota
@@ -60,22 +66,27 @@ public static class GsHota
     /// <summary>Gaussian kernel on pitch distance, gated by the enabled attributes.</summary>
     public static double Similarity(GsDetection gt, GsDetection pred, GsHotaOptions options)
     {
-        if (options.UseRoles && !StringEquals(gt.Role, pred.Role))
+        if (Attributes(gt, options) != Attributes(pred, options))
             return 0;
-        if (gt.Role is "player" or "goalkeeper")
-        {
-            if (options.UseTeams && !StringEquals(gt.Team, pred.Team))
-                return 0;
-            if (options.UseJerseyNumbers && !StringEquals(gt.Jersey, pred.Jersey))
-                return 0;
-        }
         var dx = gt.X - pred.X;
         var dy = gt.Y - pred.Y;
         return Math.Exp(-(dx * dx + dy * dy) / (2 * options.Sigma * options.Sigma));
     }
 
-    private static bool StringEquals(string? a, string? b)
-        => string.IsNullOrEmpty(a) ? string.IsNullOrEmpty(b) : a == b;
+    /// <summary>
+    /// The attributes that must agree, as the official SoccerNetGS dataset class prepares them per
+    /// detection: team only counts for players/goalkeepers and jersey only for players (when roles
+    /// are disabled, team and jersey count for everyone); disabled attributes are dropped.
+    /// </summary>
+    private static (string? Role, string? Team, string? Jersey) Attributes(GsDetection d, GsHotaOptions options)
+    {
+        var role = options.UseRoles ? Normalize(d.Role) : null;
+        var team = options.UseTeams && (!options.UseRoles || role is "player" or "goalkeeper") ? Normalize(d.Team) : null;
+        var jersey = options.UseJerseyNumbers && (!options.UseRoles || role is "player") ? Normalize(d.Jersey) : null;
+        return (role, team, jersey);
+    }
+
+    private static string? Normalize(string? value) => string.IsNullOrEmpty(value) ? null : value;
 
     private static Dictionary<long, int> BuildIdMap(IReadOnlyList<IReadOnlyList<GsDetection>> frames)
     {

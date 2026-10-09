@@ -127,6 +127,9 @@ public sealed class SoccerNetGameState : TrackingDataset
             image["frame"] = frame++;
             image["file_path"] = Path.Combine(imgFolderPath, img.GetProperty("file_name").GetString()!);
             image["is_labeled"] = img.TryGetProperty("is_labeled", out var lab) && lab.GetBoolean();
+            // v1.3 labelling flags; GS-HOTA only evaluates frames where all three are set
+            foreach (var flag in new[] { "has_labeled_pitch", "has_labeled_camera", "has_labeled_person" })
+                image[flag] = !img.TryGetProperty(flag, out var f) || f.ValueKind != JsonValueKind.False;
             image["nframes"] = nframes;
             imageMetadatas.Upsert(image);
         }

@@ -98,6 +98,31 @@ public sealed class PipelineConfig
         return deserializer.Deserialize<PipelineConfig>(File.ReadAllText(path));
     }
 
+    /// <summary>
+    /// What each configurable module's output depends on (its config section, the ONNX provider
+    /// and the size of its model files), keyed by module name. A state cache records it so a
+    /// later run refuses to reuse outputs of a module whose fingerprint changed.
+    /// </summary>
+    public IReadOnlyDictionary<string, string> ModuleFingerprints()
+    {
+        string Fingerprint(object section, params string[] models) => System.Text.Json.JsonSerializer.Serialize(new
+        {
+            Section = section,
+            Provider = models.Length > 0 ? Onnx.Provider : null,
+            Models = models.Select(m => Path.Combine(ModelsDir, m))
+                .Select(m => $"{Path.GetFileName(m)}:{(File.Exists(m) ? new FileInfo(m).Length : -1)}"),
+        });
+        return new Dictionary<string, string>
+        {
+            [nameof(YoloOnnxDetector)] = Fingerprint(BboxDetector, BboxDetector.Model),
+            [nameof(PrtReidOnnx)] = Fingerprint(Reid, Reid.Model),
+            [nameof(StrongSortModule)] = Fingerprint(Track),
+            [nameof(NbjwCalibKeypoints)] = Fingerprint(Pitch, Pitch.KpModel, Pitch.LinesModel),
+            [nameof(NbjwCalib)] = Fingerprint(Calibration),
+            [nameof(MmocrOnnx)] = Fingerprint(Jersey, Jersey.DetModel, Jersey.RecModel, Jersey.Charset),
+        };
+    }
+
     /// <summary>Builds the tracking pipeline for one video resolution.</summary>
     /// <remarks>
     /// Sets the static OnnxSessions.Provider/DeviceId as a side effect, so two pipelines with

@@ -38,6 +38,22 @@ if (dumpIdx >= 0 && dumpIdx + 1 < argList.Count)
     dumpPath = argList[dumpIdx + 1];
     argList.RemoveRange(dumpIdx, 2);
 }
+// state cache: --cache <dir> saves each video's full pipeline state after eval; --from-cache <dir>
+// seeds eval from it and reruns only the --rerun modules (comma-separated) plus every module that
+// consumes their outputs — e.g. retune the tracker without detection, calibration and OCR
+string? TakeOption(string name)
+{
+    var idx = argList.IndexOf(name);
+    if (idx < 0 || idx + 1 >= argList.Count)
+        return null;
+    var value = argList[idx + 1];
+    argList.RemoveRange(idx, 2);
+    return value;
+}
+var cacheDir = TakeOption("--cache");
+var fromCacheDir = TakeOption("--from-cache");
+var rerun = TakeOption("--rerun")?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            ?? Array.Empty<string>();
 configPath ??= File.Exists("configs/soccernet.yaml") ? "configs/soccernet.yaml" : null;
 var config = PipelineConfig.Load(configPath);
 if (configPath is not null)
@@ -70,7 +86,9 @@ int Usage()
           track <video.mp4> <out.mp4> [models_dir] [max_frames] [start_seconds]  run the pipeline on any video
           stats <video.mp4> <out.json> [models_dir] [max_frames] [start_seconds] run the pipeline + collect match statistics
           eval <dataset_path> <split> <video_name> [models_dir] [max_frames]     run pipeline + GS-HOTA vs ground truth
-                                                                        (--dump <file.json> saves metrics + detections)
+                                                                        (--dump <file.json> saves metrics + detections,
+                                                                         --cache <dir> saves the pipeline state,
+                                                                         --from-cache <dir> --rerun <Module,..> reuses it)
           eval-combine <out.json> <dump.json>...   GS-HOTA over several eval dumps, combined like TrackEval
         """);
     return 1;
@@ -198,12 +216,39 @@ int Eval(string datasetPath, string split, string videoName, string? modelsDir, 
 
     var pipeline = BuildPipeline(modelsDir, imWidth, imHeight);
     var state = new TrackerState(set);
-    new OfflineTrackingEngine(pipeline, state, log).TrackDataset();
-    var (predictions, _) = state.Load(videoId);
+    var engine = new OfflineTrackingEngine(pipeline, state, log);
+    var fingerprints = config.ModuleFingerprints();
+    if (fromCacheDir is not null)
+    {
+        var snapshot = StateCache.Load(StatePath(fromCacheDir, videoName));
+        state.Update(videoId, snapshot.Detections, snapshot.ImagePreds);
+        var toRun = ModulesToRerun(pipeline, rerun);
+        // a cached module whose config or model changed would silently reuse stale outputs
+        var stale = pipeline.Models
+            .Where(m => !toRun.Contains(m.Name) && fingerprints.TryGetValue(m.Name, out var fp)
+                        && snapshot.Meta.GetValueOrDefault(m.Name) != fp)
+            .Select(m => m.Name).ToList();
+        if (stale.Count > 0)
+            throw new InvalidOperationException(
+                $"cache {fromCacheDir} is stale for {string.Join(", ", stale)} (config or model changed) — add them to --rerun");
+        log.LogInformation("From cache {Dir}: rerunning {Modules}", fromCacheDir, string.Join(" -> ", toRun));
+        engine.ShouldRun = m => toRun.Contains(m.Name);
+    }
+    engine.TrackDataset();
+    var (predictions, predImages) = state.Load(videoId);
+    if (cacheDir is not null)
+    {
+        StateCache.Save(StatePath(cacheDir, videoName), predictions, predImages, fingerprints);
+        log.LogInformation("State cached to {Path}", StatePath(cacheDir, videoName));
+    }
 
-    // frames in GT order; predictions must have an identity and a pitch position
-    // (mirrors the dropna in the Python save_for_eval)
-    var imageIds = set.ImagesOfVideo(videoId).Select(m => m.Index).ToList();
+    // frames in GT order, only those labelled for evaluation (has_labeled_pitch/camera/person, as
+    // sn-trackeval); predictions must have an identity and a pitch position (mirrors the dropna in
+    // the Python save_for_eval); the ball is ignored on both sides (IGNORE_BALL)
+    var imageIds = set.ImagesOfVideo(videoId)
+        .Where(m => new[] { "has_labeled_pitch", "has_labeled_camera", "has_labeled_person" }
+            .All(flag => m.GetOrDefault(flag, true) == true))
+        .Select(m => m.Index).ToList();
     var gtFrames = new List<IReadOnlyList<GsDetection>>();
     var predFrames = new List<IReadOnlyList<GsDetection>>();
     foreach (var imageId in imageIds)
@@ -214,7 +259,8 @@ int Eval(string datasetPath, string split, string videoName, string? modelsDir, 
             .Select(d => ToGsDetection(d))
             .ToList());
         predFrames.Add(predictions.Rows
-            .Where(d => Equals(d["image_id"], imageId) && d.Has("track_id") && d["bbox_pitch"] is BboxPitch)
+            .Where(d => Equals(d["image_id"], imageId) && d.Has("track_id") && d["bbox_pitch"] is BboxPitch
+                        && d.GetOrDefault<string>("role") != "ball")
             .Select(d => ToGsDetection(d))
             .ToList());
     }
@@ -239,12 +285,48 @@ int Eval(string datasetPath, string split, string videoName, string? modelsDir, 
     return 0;
 }
 
+static string StatePath(string dir, string videoName) => Path.Combine(dir, $"{videoName}.state.json.gz");
+
+// The requested modules plus, in pipeline order, every module reading a column they (or an earlier
+// rerun module) write.
+static List<string> ModulesToRerun(Pipeline pipeline, IReadOnlyCollection<string> requested)
+{
+    var unknown = requested.Except(pipeline.Models.Select(m => m.Name)).ToList();
+    if (unknown.Count > 0)
+        throw new ArgumentException($"--rerun: unknown module(s) {string.Join(", ", unknown)}; pipeline has "
+                                    + string.Join(", ", pipeline.Models.Select(m => m.Name)));
+    var dirty = new HashSet<string>();
+    var result = new List<string>();
+    foreach (var module in pipeline.Models)
+    {
+        var inputs = module.GetInputColumns("detection").Select(c => "detection:" + c)
+            .Concat(module.GetInputColumns("image").Select(c => "image:" + c));
+        if (!requested.Contains(module.Name) && !inputs.Any(dirty.Contains))
+            continue;
+        result.Add(module.Name);
+        foreach (var c in module.GetOutputColumns("detection")) dirty.Add("detection:" + c);
+        foreach (var c in module.GetOutputColumns("image")) dirty.Add("image:" + c);
+    }
+    return result;
+}
+
 // Combined GS-HOTA over several sequences, as TrackEval's combine_sequences: evaluating the
 // concatenated frames with per-sequence identity spaces sums TP/FN/FP per alpha and weights
 // AssA/LocA by TP — the same aggregation, without touching the metric.
 int EvalCombine(string output, string[] inputs)
 {
-    var dumps = inputs.Select(f => JsonSerializer.Deserialize<EvalDump>(File.ReadAllText(f))!).ToList();
+    // per-sequence metrics are recomputed from the dumped detections, so a metric change re-scores
+    // old runs without running the pipeline again
+    var dumps = inputs.Select(f => JsonSerializer.Deserialize<EvalDump>(File.ReadAllText(f))!)
+        .Select(d => d with
+        {
+            Frames = d.Gt.Count,
+            Full = GsHota.Evaluate(d.Gt, d.Pred),
+            NoJersey = GsHota.Evaluate(d.Gt, d.Pred, new GsHotaOptions { UseJerseyNumbers = false }),
+            PositionOnly = GsHota.Evaluate(d.Gt, d.Pred,
+                new GsHotaOptions { UseJerseyNumbers = false, UseTeams = false, UseRoles = false }),
+        })
+        .ToList();
     var gtFrames = new List<IReadOnlyList<GsDetection>>();
     var predFrames = new List<IReadOnlyList<GsDetection>>();
     for (var s = 0; s < dumps.Count; s++)

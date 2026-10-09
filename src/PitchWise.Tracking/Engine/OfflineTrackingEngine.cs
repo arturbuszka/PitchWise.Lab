@@ -39,6 +39,13 @@ public sealed class OfflineTrackingEngine
     /// </summary>
     public CancellationToken CancellationToken { get; set; } = CancellationToken.None;
 
+    /// <summary>
+    /// Optional module filter for runs seeded from a <see cref="StateCache"/> snapshot: modules
+    /// it rejects are skipped (their cached columns stay), the others rerun on top of the cached
+    /// state after their previous output columns are cleared. Null runs every module.
+    /// </summary>
+    public Func<Module, bool>? ShouldRun { get; set; }
+
     public void TrackDataset()
     {
         foreach (var video in _trackerState.Set.VideoMetadatas.Rows)
@@ -63,6 +70,16 @@ public sealed class OfflineTrackingEngine
         foreach (var model in _pipeline.Models)
         {
             CancellationToken.ThrowIfCancellationRequested();
+            if (ShouldRun is not null)
+            {
+                if (!ShouldRun(model))
+                {
+                    _log?.LogInformation("Skipping module {Module} (cached)", model.Name);
+                    moduleIndex++;
+                    continue;
+                }
+                ClearOutputs(model, detections, imagePreds);
+            }
             _log?.LogInformation("Running module {Module}", model.Name);
             var stopwatch = System.Diagnostics.Stopwatch.StartNew();
             var reporter = new ModuleReporter(this, videoId, model.Name, moduleIndex++, moduleCount);
@@ -90,6 +107,18 @@ public sealed class OfflineTrackingEngine
                 return (detections, imagePreds);
         }
         return (detections, imagePreds);
+    }
+
+    /// <summary>Drops a rerun module's previous outputs, so rows it no longer writes (e.g.
+    /// detections a retuned tracker leaves unassigned) do not keep stale cached values.</summary>
+    private static void ClearOutputs(Module module, DataFrame detections, DataFrame imagePreds)
+    {
+        foreach (var column in module.GetOutputColumns("detection"))
+            foreach (var row in detections.Rows)
+                row[column] = null;
+        foreach (var column in module.GetOutputColumns("image"))
+            foreach (var row in imagePreds.Rows)
+                row[column] = null;
     }
 
     private void RunImageLevel(ImageLevelModule module, DataFrame detections, DataFrame imagePreds,
