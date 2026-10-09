@@ -323,3 +323,126 @@ Pomiar z cache `20261008-215833`, wynik łączny:
   znów nadają się do oceny zmian w trackingu.
 - Zostaje: granica reguły średniego x (na GT źle w 038 i 092) i bramkarz rozpoznany jako `player` (028, problem roli).
 - Potwierdzenie poza 5 sekwencjami jest na razie tylko na boxach z GT (58 sekwencji, sekcja wyżej). Pełny bieg na innych sekwencjach jeszcze nie był robiony.
+
+### Diagnoza: fragmentacja torów (2026-10-09)
+
+Analiza offline w Pythonie na cache biegu `20261008-215833` (tory obecnego configu; kolor drużyn nie zmienia trackera). Kod w repo bez zmian.
+Predykcje dopasowane do GT w obrazie (IoU ≥ 0.5, Hungarian per klatka). „Zerwanie” to zmiana przewidzianego ID między kolejnymi dopasowaniami tej samej osoby z GT.
+Dla każdego zerwania odtworzony stan starego toru (Kalman i EMA embeddingu; zależy tylko od jego własnych detekcji) w klatce, w której osoba dostała nowe ID.
+Do pomiaru wpływu na GS-HOTA służy replika StrongSORT.NET w Pythonie. W trybie „jak C#” daje **identyczne `track_id` w 100% detekcji** (sprawdzone na 022 i 028).
+Jej ID są wstawiane do zrzutów biegu `20261009-112413` (obecny config) i przeliczane przez `eval-combine`.
+
+**1. Przyczyny zerwań w obecnym trackerze (2484 zerwania na 5 sekwencjach):**
+
+| powód (w klatce nowego ID) | liczba | udział | uwagi |
+|---|--:|--:|---|
+| bramka Mahalanobisa odrzuciła stary tor | 1964 | 79% | 70% bez żadnej przerwy w detekcji; wygląd pasuje (mediana odl. kos. 0.05 przy progu 0.5) |
+| stary tor przegrał w Hungarian (inny tor wziął detekcję) | 446 | 18% | głównie migotanie między dwoma torami tej samej osoby |
+| stary tor zajęty inną detekcją (zamiana ID) | 72 | 3% | 78% przy okluzji (IoU z innym GT > 0.3) |
+| wygląd > 0.5 | 1 | 0% | |
+| tor usunięty po `max_age` | 1 | 0% | |
+
+1499 z 2484 zerwań to powrót do ID, które ta sama osoba już miała, czyli migotanie A→B→A. Suma „liczba ID na osobę” wynosi 1094 przy 538 ID.
+Przy zerwaniach bez przerwy bramkę przekracza **wymiar proporcji boxa** (`a = w/h`): mediana jego udziału to 13.8 przy progu 9.49, a pozycja x/y daje 0.8 (błąd ok. 0.1 wysokości boxa).
+Zmiana kroku zawodnika między klatkami wystarcza, żeby tor odpadł.
+
+**2. Przyczyna: dwie rozbieżności portu StrongSORT.NET z `bpbreid_strong_sort` z tracklab 1.3.24** (tracker używany przez sn-gamestate):
+
+| | oryginał (`bpbreid_strong_sort/sort/kalman_filter.py`) | StrongSORT.NET |
+|---|---|---|
+| szum składowej proporcji (init / predict / project) | `2h/20`, `10h/160` / `h/20`, `h/160` / `h/20`, czyli praktycznie bez ograniczenia | `1e-2`, `1e-5` / `1e-2`, `1e-5` / `1e-1` (wartości z pierwotnego StrongSORT; w oryginale są tylko w komentarzu) |
+| szum pomiaru w bramce | `gating_distance` woła `project(mean, cov)` bez confidence, czyli pełny szum | `GatingDistance` przekazuje `det.Confidence`, więc szum × (1 − conf); przy conf 0.9 wariancja jest 100× mniejsza |
+| liczba predykcji bez pomiaru | `time_since_update < 7` | `<= 7` (drobiazg) |
+
+Drobne różnice, których replika nie zmienia: oryginał robi EMA na nieznormalizowanych cechach, odległość wyglądu liczy jako `sqrt(2-2cos)/2`
+(przy progu 0.5 to ta sama bramka co `1-cos ≤ 0.5`), a próg `max_dist` stosuje do sumy `0.995·app + 0.005·maha` (surowa, nie `min(maha/gate, 1)`).
+
+**Wpływ (replika w Pythonie, wynik łączny):**
+
+| tracker | ID | pełny* | bez nr* | pozycja HOTA | pozycja AssA |
+|---|--:|--:|--:|--:|--:|
+| jak teraz (C#) | 538 | 35.0 | 48.3 | 50.3 | 37.4 |
+| tylko bramka bez confidence | 423 | 38.7 | 54.3 | 56.6 | 47.3 |
+| tylko szum proporcji jak w oryginale | 377 | 38.9 | 54.4 | 56.4 | 47.2 |
+| **obie + `<` (semantyka oryginału)** | 364 | **38.4** | **55.0** | **57.4** | **48.7** |
+| semantyka oryginału + `max_age 30` | 426 | 39.1 | 54.9 | 57.2 | 48.1 |
+| jak teraz + `max_age 30` (kontrola) | 609 | 36.5 | 51.2 | 53.2 | 41.8 |
+
+\* „pełny” i „bez nr” są przybliżone: rola, drużyna i numer to większość etykiet ze starego biegu w obrębie nowego toru (zastępstwo głosowania na tor).
+Kontrola: dla `max_age 30` prawdziwy C# dał 37.0 / 51.8 / 53.2, przybliżenie daje 36.5 / 51.2 / 53.2, czyli lekko zaniża. „Sama pozycja” jest dokładna.
+
+Per sekwencja (pełny / bez nr / pozycja), semantyka oryginału vs teraz:
+022 41.0/66.4/70.0 vs 33.2/55.9/57.9; 028 35.0/55.7/61.3 vs 29.6/44.3/50.5; 038 56.4/62.8/64.1 vs 53.5/60.0/60.3;
+079 18.6/46.2/47.6 vs 16.8/36.3/38.1; 086 37.7/46.2/47.7 vs 36.5/44.6/45.4. **Poprawa w każdej sekwencji i w każdym wariancie.**
+`max_age` przestaje mieć znaczenie, bo zysk z `max_age 30` w obecnym trackerze polegał na ograniczaniu migotania.
+
+**3. Co zostaje po poprawce (semantyka oryginału, 624 zerwania).** Górne granice (wyrocznie z GT), sama pozycja:
+
+| wyrocznia | HOTA | AssA |
+|---|--:|--:|
+| tracker z semantyką oryginału | 57.4 | 48.7 |
+| idealne sklejanie torów (tylko tory rozłączne w czasie) | 62.6 | 57.9 |
+| samo rozcięcie zamian ID | 57.6 | 48.7 |
+| rozcięcie zamian + sklejanie | 65.7 | 63.4 |
+| idealna asocjacja (dopasowane detekcje dostają ID z GT) | 69.7 | 71.4 |
+| *dla porównania: idealne sklejanie na obecnym trackerze* | *53.6* | *42.6* |
+
+Na obecnym trackerze nawet idealne sklejanie (53.6) daje mniej niż sama poprawka portu. Przeplatające się tory nie są rozłączne w czasie, więc nie da się ich skleić.
+
+Zysk z idealnego sklejania (+5.3) według przyczyny przerwy między fragmentami (138 linków):
+
+| przyczyna przerwy | linki | zysk HOTA | mediana przerwy | przesunięcie kamery > 200 px |
+|---|--:|--:|--:|--:|
+| osoba poza kadrem (GT nieoznaczone w ≥ 50% przerwy) | 45 | +2.4 | 122 kl. | 91% |
+| okluzja (IoU z innym GT > 0.3) | 44 | +1.1 | 46 kl. | 61% |
+| widoczna, bez detekcji lub toru | 45 | +1.2 | 6 kl. | 22% |
+| bez przerwy | 4 | +0.1 | 0 | 0% |
+
+Po przerwie dłuższej niż 7 klatek predykcja Kalmana zamarza w obrazie, a kamera w tym czasie się przesuwa (ECC w oryginale też jest wyłączone).
+Taki powrót może więc złapać tylko sklejanie offline albo kompensacja ruchu kamery.
+
+**4. Rozróżnialność par do sklejania** (tory rozłączne w czasie, przerwa ≤ 15 s; 5679 par, 311 prawdziwych):
+- wygląd (średni embedding toru): AUC 0.82; wśród par z tej samej drużyny i w zasięgu na boisku tylko 0.77. Embedding słabo odróżnia kolegów z drużyny.
+- drużyna z `torso_color` (KMeans jak w `TrackletTeamClustering`): zgodna w 83% prawdziwych par i w 33% fałszywych.
+  Niezgodności to prawie wyłącznie bardzo krótkie tory (mediana 2 detekcje). Dla torów ≥ 25 detekcji zgodność wynosi 95%.
+  Drużyna nadaje się więc na twarde ograniczenie, ale tylko dla torów z wiarygodnym kolorem (np. ≥ 10 detekcji).
+- odległość na boisku między końcem i początkiem: mediana 9 m przy medianie przerwy 3.3 s; 90. percentyl prędkości 14.6 m/s (szum kalibracji).
+
+**Prototyp sklejania offline** (na torach z semantyką oryginału): Hungarian koniec toru → początek toru, najwyżej jeden następnik i jeden poprzednik.
+Ograniczenia twarde: rozłączność w czasie, przerwa ≤ 10 s, odległość ≤ 3 m + 8 m/s·Δt, ta sama drużyna z koloru (gdy oba tory mają ≥ 10 detekcji),
+odległość wyglądu ≤ 0.3. Koszt: `app + 0.3·d/zasięg + 0.1·min(Δt/10 s, 1)`, odrzucenie linku przy koszcie > τ.
+
+| wariant | linki (poprawne / błędne / FP) | pełny* | bez nr* | pozycja HOTA | pozycja AssA |
+|---|---|--:|--:|--:|--:|
+| bez sklejania | — | 38.4 | 55.0 | 57.4 | 48.7 |
+| τ = 0.1 | 102 (63 / 28 / 11) | 40.4 | 58.2 | 60.5 | 54.1 |
+| τ = 0.2 | 162 (79 / 65 / 18) | 40.5 | 58.2 | 60.6 | 54.5 |
+| bez τ | 183 (80 / 78 / 25) | 40.3 | 58.0 | 60.3 | 54.1 |
+
+Wynik słabo zależy od parametrów: `max_app` 0.2–0.4, `vmax` 6–10, przerwa 5–15 s i próg drużyny 1–25 detekcji dają 60.2–60.6.
+To ok. 60% zapasu z wyroczni sklejania. Zysk jest nierówny: pozycja 022 +9.0, 028 +0.2, 038 +1.4, 079 +2.3, 086 +1.2.
+
+### StrongSORT zgodny z tracklab — wdrożone (2026-10-09)
+
+Poprawka z punktu 2 diagnozy wyżej, w StrongSORT.NET (`../StrongSort.NET`). PitchWise korzysta z niego teraz przez `ProjectReference`
+zamiast paczki `StrongSort.Net 1.0.0`, więc repo StrongSORT.NET musi leżeć obok PitchWise.Lab (także na Windows).
+- `StrongSortOptions.KalmanNoise`: `BpbReid` (domyślnie; szum proporcji `h/20`, `h/160` jak w tracklab) albo `StrongSort` (dawne stałe 1e-2 / 1e-5 / 1e-1);
+- `StrongSortOptions.GatingUsesConfidence`: domyślnie `false`, czyli bramka z pełnym szumem pomiaru, jak w tracklab;
+- predykcja Kalmana działa, dopóki `time_since_update < MaxKalmanPredictionsWithoutUpdate` (było `<=`);
+- config, sekcja `track`: `kalman_noise: bpbreid`, `gating_uses_confidence: false`, `max_kalman_predictions_without_update: 7`.
+  Stary tracker odtwarzają `strongsort` / `true` / `8`. Sprawdzone: zrzuty wszystkich 5 sekwencji są identyczne z runem `20261009-112413`.
+- testy: StrongSort.Tests 14/14 (4 nowe: powrót po przerwie ze zmienioną proporcją boxa, bramka w trzech trybach, liczba predykcji bez pomiaru), GameState.Tests 48/48.
+
+Sekcja `track` w fingerprincie ma nowe pola, więc cache zapisany wcześniej wymaga `StrongSortModule` w `RERUN`.
+Pomiar z cache `20261008-215833` (`RERUN=StrongSortModule,TorsoColor`, run `20261009-135233`), wynik łączny:
+
+| config | pełny HOTA | bez nr HOTA | pozycja HOTA | pozycja AssA | pełny per sekwencja (022/028/038/079/086) | pozycja per sekwencja |
+|---|--:|--:|--:|--:|---|---|
+| baseline | 31.9 | 40.5 | 50.3 | 37.4 | 16.0 / 29.7 / 53.5 / 16.8 / 35.2 | 57.9 / 50.5 / 60.3 / 38.1 / 45.4 |
+| poprzedni domyślny (`color`, tracker jak w 1.0.0) | 35.0 | 48.3 | 50.3 | 37.4 | 33.2 / 29.6 / 53.5 / 16.8 / 36.5 | 57.9 / 50.5 / 60.3 / 38.1 / 45.4 |
+| **`color` + tracker zgodny z tracklab** | **39.3** | **55.8** | **57.4** | **48.7** | 45.8 / 32.7 / 56.2 / 19.8 / 38.0 | 70.0 / 61.3 / 64.1 / 47.6 / 47.7 |
+
+- Poprawa w każdej sekwencji i każdym wariancie. „Sama pozycja” zgadza się co do dziesiątej części z repliką w Pythonie (57.4).
+  „Pełny” i „bez nr” wyszły wyżej niż przybliżenie (38.4 / 55.0), bo prawdziwe głosowanie na tor działa lepiej.
+- Zmiana przywraca zachowanie oryginału, a nie stroi parametrów, więc ryzyko przeuczenia pod 5 sekwencji jest małe.
+  Pełnego biegu poza stałą piątką nadal nie było.

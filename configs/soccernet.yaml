@@ -25,6 +25,9 @@ track:  # StrongSORT hyperparameters
   max_age: 300
   n_init: 0
   min_confidence: 0.0
+  max_kalman_predictions_without_update: 7
+  kalman_noise: bpbreid          # bpbreid (tracklab, as sn-gamestate) | strongsort (original paper; with gating_uses_confidence: true
+  gating_uses_confidence: false  #   and max_kalman_predictions_without_update: 8 = the tracker of the 2026-10-08 baseline)
 
 pitch:
   enabled: auto

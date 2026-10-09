@@ -65,6 +65,17 @@ public sealed class PipelineConfig
         public int MaxAge { get; set; } = 300;
         public int NInit { get; set; } = 0;
         public float MinConfidence { get; set; } = 0f;
+        public int MaxKalmanPredictionsWithoutUpdate { get; set; } = 7;
+        /// <summary>bpbreid (tracklab, aspect-ratio noise scales with box height) | strongsort (original paper constants).</summary>
+        public string KalmanNoise { get; set; } = "bpbreid";
+        public bool GatingUsesConfidence { get; set; } = false;
+
+        public StrongSort.KalmanNoise ParsedKalmanNoise => KalmanNoise.ToLowerInvariant() switch
+        {
+            "bpbreid" => StrongSort.KalmanNoise.BpbReid,
+            "strongsort" => StrongSort.KalmanNoise.StrongSort,
+            _ => throw new ArgumentException($"track.kalman_noise: unknown value '{KalmanNoise}' (expected bpbreid or strongsort)"),
+        };
     }
 
     public sealed class PitchConfig
@@ -200,6 +211,9 @@ public sealed class PipelineConfig
             MaxAge = Track.MaxAge,
             NInit = Track.NInit,
             MinConfidence = Track.MinConfidence,
+            MaxKalmanPredictionsWithoutUpdate = Track.MaxKalmanPredictionsWithoutUpdate,
+            KalmanNoise = Track.ParsedKalmanNoise,
+            GatingUsesConfidence = Track.GatingUsesConfidence,
         }));
         if (hasCalib)
         {

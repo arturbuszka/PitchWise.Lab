@@ -3,7 +3,9 @@
   <ItemGroup>
     <ProjectReference Include="..\PitchWise.Tracking\PitchWise.Tracking.csproj" />
     <ProjectReference Include="..\PitchWise.Engine\PitchWise.Engine.csproj" />
-    <PackageReference Include="StrongSort.Net" Version="1.0.0" />
+    <!-- StrongSort.NET from the sibling repo (../StrongSort.NET) while the tracker is being aligned with tracklab;
+         switch back to the StrongSort.Net package once a new version is published. -->
+    <ProjectReference Include="..\..\..\StrongSort.NET\src\StrongSort\StrongSort.csproj" />
   </ItemGroup>
 
   <ItemGroup>
