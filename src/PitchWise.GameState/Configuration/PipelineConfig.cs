@@ -33,6 +33,7 @@ public sealed class PipelineConfig
     public PitchConfig Pitch { get; set; } = new();
     public CalibrationConfig Calibration { get; set; } = new();
     public JerseyConfig Jersey { get; set; } = new();
+    public RoleCorrectionConfig RoleCorrection { get; set; } = new();
     public TeamConfig Team { get; set; } = new();
 
     public sealed class OnnxConfig
@@ -126,6 +127,30 @@ public sealed class PipelineConfig
         public string Charset { get; set; } = "mmocr_charset.txt";
     }
 
+    /// <summary>Role correction by jersey colour (<see cref="TrackletRoleCorrection"/>); off unless enabled.</summary>
+    public sealed class RoleCorrectionConfig
+    {
+        public bool Enabled { get; set; }
+        public double MaxRefereesPerFrame { get; set; } = 3;
+        public double MaxGoalkeepersPerFrame { get; set; } = 2;
+        public double LightnessWeight { get; set; } = 0.25;
+        public double TeamColorRadius { get; set; } = 20;
+        public double GoalkeeperColorDistance { get; set; } = 15;
+        public double GoalkeeperMinAbsX { get; set; } = 38;
+        public int MinColorDetections { get; set; } = 10;
+
+        public TrackletRoleCorrectionOptions ToOptions() => new()
+        {
+            MaxRefereesPerFrame = MaxRefereesPerFrame,
+            MaxGoalkeepersPerFrame = MaxGoalkeepersPerFrame,
+            LightnessWeight = LightnessWeight,
+            TeamColorRadius = TeamColorRadius,
+            GoalkeeperColorDistance = GoalkeeperColorDistance,
+            GoalkeeperMinAbsX = GoalkeeperMinAbsX,
+            MinColorDetections = MinColorDetections,
+        };
+    }
+
     public sealed class TeamConfig
     {
         /// <summary>What tracklets are split into teams by: "color" (jersey colour, TorsoColor) or
@@ -176,6 +201,7 @@ public sealed class PipelineConfig
             [nameof(MmocrOnnx)] = Fingerprint(Jersey, Jersey.DetModel, Jersey.RecModel, Jersey.Charset),
             // no settings: the entry only makes a cache saved before the module existed count as stale
             [nameof(TorsoColor)] = Fingerprint(new { }),
+            [nameof(TrackletRoleCorrection)] = Fingerprint(RoleCorrection),
             [nameof(TrackletTeamClustering)] = Fingerprint(Team),
         };
     }
@@ -228,7 +254,7 @@ public sealed class PipelineConfig
         var teamFeature = Team.ParsedFeature;
         if (hasReid)
             modules.Add(new PrtReidOnnx(Model(Reid.Model), Reid.BatchSize));
-        if (hasReid && (teamFeature == TeamFeature.Color || TrackletMerging.Enabled))
+        if (hasReid && (teamFeature == TeamFeature.Color || TrackletMerging.Enabled || RoleCorrection.Enabled))
             modules.Add(new TorsoColor());
         modules.Add(new StrongSortModule(new StrongSortOptions
         {
@@ -263,6 +289,13 @@ public sealed class PipelineConfig
         if (hasReid) voteAttributes.Add("role");
         if (voteAttributes.Count > 0)
             modules.Add(new MajorityVoteTracklet(voteAttributes.ToArray()));
+        if (RoleCorrection.Enabled)
+        {
+            if (!hasReid || !hasCalib)
+                throw new InvalidOperationException(
+                    "role_correction needs reid (role, torso_color) and calibration (bbox_pitch)");
+            modules.Add(new TrackletRoleCorrection(RoleCorrection.ToOptions(), log));
+        }
         if (hasReid)
         {
             modules.Add(new TrackletTeamClustering(teamFeature));

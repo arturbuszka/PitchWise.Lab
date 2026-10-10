@@ -565,3 +565,147 @@ To znany przypadek, w którym reguła średniego x myli się już na GT.
 
 Na sekwencjach kontrolnych role i drużyny kosztują ok. 23 pkt, na piątce ok. 1.
 Sama poprawa drużyn daje tylko część zysku, bo toru z rolą `referee` nie obejmuje klasteryzacja drużyn. Pełny zysk wymaga poprawienia roli i drużyny razem.
+
+### Korekta ról po kolorze koszulki (`TrackletRoleCorrection`) (2026-10-10)
+
+Analiza offline w Pythonie, potem moduł w C#. Role z naszego ONNX (CPU) i kolor tułowia (jak w `TorsoColor`) policzone na boxach z GT
+co 10. klatkę we wszystkich 58 sekwencjach valid. Rola toru GT to głosowanie ważone pewnością, jak w `MajorityVoteTracklet`.
+
+**1. Skala problemu.** Valid to tylko 3 mecze: game 2 (021–038), game 3 (039–059) i game 5 (078–096).
+- **Cała drużyna jako `referee`:** 21 z 58 sekwencji, czyli **wszystkie sekwencje meczu 3** i żadna z dwóch pozostałych meczów.
+  - Dotyczy drużyny w żółtych koszulkach (Lab ok. 185/116/180). W 039–048 to drużyna prawa, w 049–059 lewa, czyli ta sama drużyna po zmianie stron.
+  - Tej drużynie model daje `referee` w 59–98% detekcji, a `goalkeeper` w 1–37%.
+  - Prawdziwi sędziowie dostają tam `player` w 32–89% detekcji.
+  - Średnio w każdej klatce widać 7–9 torów z głosem `referee`, w porywach 11.
+    W meczach 2 i 5 średnio najwyżej 1.7, a maksimum to 3. Z GT wychodzi średnio najwyżej 1.8 sędziego na klatkę.
+- **Bramkarz z GT ma w torze głos `player`:** 28 z 58 sekwencji. To 7 sekwencji meczu 2, prawie cały mecz 3 i 3 sekwencje meczu 5.
+- Problem z sędziami to więc jeden strój w jednym meczu, a nie zjawisko widoczne w wielu meczach.
+  Stała piątka nie ma żadnej sekwencji z meczu 3. Z sekwencji kontrolnych należą do niego 041, 044, 048, 050 i 056.
+
+**2. Reguła** (projekt i wybór parametrów na torach i boxach z GT wszystkich 58 sekwencji).
+Kolor toru to mediana Lab, a L ma wagę 0.25. Kanał a/b rozdziela drużyny czysto, natomiast w meczu 3 cień zmienia L w jednej drużynie od 83 do 204.
+Przy wadze L 0.5 albo przy standaryzacji kanałów prototypy drużyn rozjeżdżają się w 048 i 056.
+1. **Zatłoczona grupa to drużyna.** Wyzwalacz: średnio więcej niż 3 detekcje `referee` albo więcej niż 2 detekcje `goalkeeper` na klatkę.
+   - Prototypy drużyn to mediana koloru zatłoczonej grupy i mediana koloru grupy `player`.
+   - Tor bliżej niż 20 od któregoś prototypu dostaje rolę `player`.
+   - Tor z głosem `player`, który jest dalej od obu prototypów, staje się „outsiderem”.
+2. **Bramkarz.** Prototypy drużyn to mediany klastrów KMeans (k=2) z torów `player`.
+   - Tor `player` albo outsider, który jest dalej niż 15 od obu prototypów i ma średnie |x| > 38 m, dostaje rolę `goalkeeper`.
+   - Na każdą połowę najwyżej jeden taki tor: ten najdalszy w kolorze.
+   - Pozostali outsiderzy dostają rolę `referee`.
+   - Na GT bramkarze z głosem `player` mają |x| ≥ 41 m i odległość ≥ 18. Zawodnicy daleko od kolorów drużyn mają |x| ≤ 35 m.
+
+Zgodność z GT (rola, drużyna z KMeans i reguły strony, oraz obie naraz; średnia po sekwencjach, liczona na wszystkich detekcjach GT):
+
+| mecz | rola | drużyna | rola i drużyna | sekwencje gorsze niż bez reguły |
+|---|---|---|---|---|
+| game 2 (18) | 98.5% → 99.8% | 92.9% → 94.0% | 93.3% → 94.3% | 036 (−0.4) |
+| game 3 (21) | 45.6% → 80.9% | 31.9% → 83.6% | 25.3% → **80.0%** | brak (każda co najmniej +30) |
+| game 5 (19) | 99.7% → 99.9% | 89.5% → 94.6% | 90.4% → 95.0% | brak |
+| wszystkie 58 | 79.7% → 93.0% | 69.7% → 90.4% | 67.7% → **89.4%** | |
+
+- W meczach 2 i 5 wyzwalacz nie odpala ani razu. Zmiany pochodzą tylko z reguły bramkarza.
+  Poprawia ona też stronę w 084 (13% → 100%), bo bramkarz liczony jako zawodnik przesuwał średnie x klastra.
+- **Wrażliwość:** parametry dobrane w siatce (waga L 0 / 0.1 / 0.25 / 0.5, R 10–30, D 10–20). W okolicy wybranego punktu wynik dla meczu 3 skacze.
+  Na przykład R 25 daje 059: 17%, a D 20 daje 042: 4%. To odwrócone strony: reguła średniego x jest czuła na to, kto trafi do drużyny.
+  Sam krok 1 bez kroku bramkarza odwraca strony w 042 i 058.
+- W 045, 048 i 058 zostaje 58–74%: część zawodników w głębokim cieniu wypada poza promień i dostaje `referee`.
+  Ciemnych sędziów (L ok. 20–70) nie da się kolorem odróżnić od białej drużyny w cieniu.
+
+**3. Symulacja** na zrzutach obecnego configu. Tory z pipeline'u, czyli z cache nowego biegu z tymi samymi wynikami co `20261009-230818` i `20261009-170459`.
+Minimum 10 detekcji z kolorem. Drużyny i strony przeliczone przez pythonowy odpowiednik `TrackletTeamClustering` i `TrackletTeamSideLabeling`,
+który na tych torach daje te same etykiety co C# (100%; w 050 99.98%). Wynik: piątka 41.0 / 59.4 / 60.5, kontrolne 47.2 / 57.7.
+
+**4. Moduł** [`TrackletRoleCorrection`](../src/PitchWise.GameState/Team/TrackletRoleCorrection.cs) (poziom wideo, ok. 0.1 s na sekwencję)
+stoi za `MajorityVoteTracklet` i przed `TrackletTeamClustering`.
+- Czyta `image_id`, `track_id`, `role`, `torso_color` i `bbox_pitch`, a nadpisuje `role`.
+  `--rerun TrackletRoleCorrection` sam dokłada więc `MajorityVoteTracklet`.
+- **Config:** sekcja `role_correction` z `enabled: false` i parametrami jak wyżej, z fingerprintem w `PipelineConfig`.
+  Wymaga reid i kalibracji. Gdy moduł jest włączony, pipeline dokłada `TorsoColor`.
+- **Testy:** 8 nowych (`TrackletRoleCorrectionTests`), GameState.Tests 68/68.
+
+Pomiar z cache:
+- piątka: `20261008-215833`, `RERUN=StrongSortModule,TorsoColor`, run `20261010-101602`;
+- kontrolne: `20261009-211433`, `RERUN=TrackletMerging`, OCR wyłączony, run `20261010-101828`.
+
+| config | piątka pełny | piątka bez nr | piątka pozycja | kontrolne bez nr | kontrolne pozycja |
+|---|--:|--:|--:|--:|--:|
+| baseline | 31.9 | 40.5 | 50.3 | 23.4 | 47.6 |
+| obecny domyślny | 40.4 | 58.8 | 60.5 | 34.0 | 57.7 |
+| **+ `role_correction`** | **41.0** | **59.4** | 60.5 | **47.2** | 57.7 |
+
+Bez numerów per sekwencja (obecny domyślny → z korektą):
+
+| sekwencja | 022 | 028 | 038 | 079 | 086 |
+|---|---|---|---|---|---|
+| piątka | 77.4 → 77.4 | 58.8 → **63.3** | 63.6 → 63.6 | 48.3 → 48.3 | 48.9 → 48.8 |
+
+| sekwencja | 023 | 031 | 034 | 041 | 044 | 048 | 050 | 056 | 082 | 092 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| kontrolne | 39.5 → 40.9 | 51.0 → 51.0 | 55.0 → 55.0 | 17.8 → **71.4** | 27.9 → **43.8** | 20.0 → **39.3** | 21.4 → **38.1** | 27.7 → **57.7** | 58.7 → 58.7 | 19.4 → 19.4 |
+
+- **C# odtwarza symulację:** wynik łączny i każda sekwencja co do dziesiątej części.
+  Rola i drużyna są identyczne w 145 tys. predykcji z wyjątkiem 2 (031).
+- **Wyzwalacz odpala dokładnie w 5 sekwencjach meczu 3** (zatłoczona grupa `referee`; zmienia 6–22 torów).
+  W pozostałych 10 sekwencjach zmienia najwyżej 1 tor, zawsze na `goalkeeper`.
+  W 028, 023 i 031 to bramkarz z GT. W 086 to fałszywy bramkarz: tor sklejony z zawodników obu drużyn, z kolorem pomiędzy nimi, przy bramce (−0.1).
+- Wariant pełny na piątce: 40.4 → 41.0 (028: 32.7 → 37.3).
+- Z górnej granicy dla sekwencji kontrolnych (57.3 przy idealnej roli i drużynie) zostaje ok. 10 pkt.
+  Na to składają się: 092 (odwrócone strony, nietknięte), cień w 044/048/050 i sędziowie oznaczeni jako zawodnicy.
+- **Zastrzeżenie:** część „drużyna jako sędziowie” jest zaprojektowana i dostrojona na GT meczu 3, a z tego meczu pochodzi 5 sekwencji kontrolnych.
+  Ich zysk (+13 pkt) nie jest więc niezależnym potwierdzeniem, tylko pokazuje, że reguła z GT przenosi się na tory z pipeline'u.
+  Niezależnym sprawdzianem byłby inny mecz z tym problemem. Lokalnie jest tylko split valid, więc wymagałoby to danych train lub test.
+  Reguła bramkarza działa w trzech meczach.
+- Moduł zostaje wyłączony (`enabled: false`) do decyzji.
+
+**Decyzja (2026-10-10):** `role_correction.enabled: true` w `configs/soccernet.yaml`.
+- Wyzwalacz części „drużyna jako sędziowie” w meczach bez problemu nie odpala.
+- Tam, gdzie odpala, wynik bez korekty jest bardzo zły.
+- Reguła bramkarza działa w trzech meczach.
+- Zastrzeżenie o meczu 3 zostaje: część „drużyna jako sędziowie” trzeba sprawdzić na innym meczu z tym problemem (split train lub test).
+
+Sprawdzone: domyślny config z cache daje zrzuty bit w bit identyczne z runami `20261010-101602` (piątka) i `20261010-101828` (kontrolne).
+Runy kontrolne: `20261010-154834` i `20261010-155057`.
+Obecny domyślny config daje więc:
+- stała piątka: **41.0 / 59.4 / 60.5** (pełny / bez nr / pozycja);
+- sekwencje kontrolne: **47.2 / 57.7** (bez nr / pozycja).
+
+### Strona drużyn: 092 to błąd etykiet GT, nie reguły (2026-10-10)
+
+Analiza na GT wszystkich 58 sekwencji valid (tory, drużyny i pozycje z GT) i na zrzutach runów `20261010-101602` / `20261010-101828`. Kod bez zmian.
+
+**1. W 092 etykiety drużyn zawodników w GT są zamienione.**
+- Drużyna w białych koszulkach (Lab ok. 190/125/129) ma etykietę `right` w każdej sekwencji drugiej połowy meczu 5 (086–096), poza 092.
+  - 092 zaczyna się w 2-33:37, czyli między 091 (29:10) i 093 (34:20). W obu tych sekwencjach biali są `right`.
+  - W trakcie połowy strony się nie zmieniają.
+- W 092 wszystkie sygnały z ustawienia wskazują przeciwnie do etykiet zawodników:
+  - średnie x: −3.8 m;
+  - głos „drugi najbardziej wysunięty”: −0.74;
+  - głos „drugi najgłębszy”: −0.68;
+  - bliskość bramkarzy: −1.00 / −0.31.
+- Na klatkach 20 i 700 niebiescy (w GT `right`) bronią lewej bramki, przy bramkarzu oznaczonym `left`.
+- Pipeline przypisuje więc strony w 092 poprawnie, a GS-HOTA liczy to jako błąd.
+  Wyrocznia „poprawione strony” (+7.3 na kontrolnych, sekcja wyżej) mierzyła ten błąd etykiet, a nie zapas do odzyskania.
+  Metryki ani GT nie zmieniam. Sekwencję 092 trzeba czytać z tym zastrzeżeniem.
+- W meczu 2 etykiety są spójne: biali to `right` w pierwszej połowie (021–028) i `left` w drugiej (029–038). Także w 038.
+
+**2. 038 to rzeczywista granica reguły średniego x.** Klip toczy się pod bramką R: stały fragment, obie drużyny w polu karnym.
+Margines na GT wynosi −1.0 m. Na torach z pipeline'u 038 akurat wychodzi dobrze (zgodność drużyny 92%).
+
+**3. Sygnały sprawdzone na GT** (poza wariantami z sekcji „Diagnoza: drużyny i strony”):
+
+| sygnał | błędne sekwencje na GT (bez 092) |
+|---|---|
+| średnie x klastra (obecna reguła) | 038; 056 na granicy (0.0 m) |
+| głos klatkami: drugi najbardziej wysunięty zawodnik | 030, 038, 054, 086 (0.00) |
+| głos klatkami: drugi najgłębszy zawodnik | 037, 038, 056 (−0.01) |
+| bliskość bramkarza: 3 najbliżsi z każdej drużyny, strona bramkarza wg połowy | 030, 093, niejednoznaczne 043 i 058 (68 z 75 bramkarzy ma bliżej swoich) |
+
+Połączenie „przy marginesie < 1.5 m decyduje bramkarz” naprawia 038, ale psuje 030 (margines 0.5 m, głos bramkarza −0.45).
+Na GT bilans wynosi zero, więc to byłoby strojenie pod dwa przypadki.
+
+**4. Stan w pipeline (z `role_correction`):** zgodność drużyny zawodników z GT 90–99% we wszystkich 15 sekwencjach poza 092.
+Bez korekty ról odwrócone wyglądały też 041 (18%), 048 (40%) i 056 (37%). To był skutek złych ról, a nie reguły strony.
+
+**Wniosek:** reguły lepszej od średniego x nie znalazłem. Na obecnych 15 sekwencjach jedyna zła strona to błąd GT, więc modułu nie dodaję.
+Punkt 2 kolejki można zamknąć. Wraca, jeśli na nowych danych pojawią się zamiany stron przy poprawnych etykietach.
