@@ -119,11 +119,12 @@ int Render(string datasetPath, string split, string videoName, string output)
     return 0;
 }
 
-Pipeline BuildPipeline(string? modelsDir, int imWidth, int imHeight)
+Pipeline BuildPipeline(string? modelsDir, Series video)
 {
     if (modelsDir is not null)
         config.ModelsDir = modelsDir;
-    return config.BuildPipeline(imWidth, imHeight, log);
+    return config.BuildPipeline((int)video.Get<long>("im_width"), (int)video.Get<long>("im_height"), log,
+        video.GetOrDefault<long>("frame_rate"));
 }
 
 int Track(string videoPath, string output, string? modelsDir, int maxFrames, double startSeconds = 0)
@@ -137,9 +138,7 @@ int Track(string videoPath, string output, string? modelsDir, int maxFrames, dou
     var videoId = set.VideoMetadatas.Rows.First().Get<long>("id");
     log.LogInformation("{N} frames", set.ImageMetadatas.Count);
 
-    var imWidth = (int)set.VideoMetadatas.Rows.First().Get<long>("im_width");
-    var imHeight = (int)set.VideoMetadatas.Rows.First().Get<long>("im_height");
-    var pipeline = BuildPipeline(modelsDir, imWidth, imHeight);
+    var pipeline = BuildPipeline(modelsDir, set.VideoMetadatas.Rows.First());
 
     var state = new TrackerState(set);
     var engine = new OfflineTrackingEngine(pipeline, state, log);
@@ -164,9 +163,7 @@ int Stats(string videoPath, string output, string? modelsDir, int maxFrames, dou
     var fps = video.Get<long>("frame_rate");
     log.LogInformation("{N} frames @ {Fps} fps", set.ImageMetadatas.Count, fps);
 
-    var imWidth = (int)video.Get<long>("im_width");
-    var imHeight = (int)video.Get<long>("im_height");
-    var pipeline = BuildPipeline(modelsDir, imWidth, imHeight);
+    var pipeline = BuildPipeline(modelsDir, video);
 
     var state = new TrackerState(set);
     new OfflineTrackingEngine(pipeline, state, log).TrackDataset();
@@ -211,10 +208,8 @@ int Eval(string datasetPath, string split, string videoName, string? modelsDir, 
     if (maxFrames > 0)
         set = TrimSet(set, maxFrames);
     var videoId = set.VideoMetadatas.Rows.First().Get<long>("id");
-    var imWidth = (int)set.VideoMetadatas.Rows.First().Get<long>("im_width");
-    var imHeight = (int)set.VideoMetadatas.Rows.First().Get<long>("im_height");
 
-    var pipeline = BuildPipeline(modelsDir, imWidth, imHeight);
+    var pipeline = BuildPipeline(modelsDir, set.VideoMetadatas.Rows.First());
     var state = new TrackerState(set);
     var engine = new OfflineTrackingEngine(pipeline, state, log);
     var fingerprints = config.ModuleFingerprints();
@@ -295,13 +290,25 @@ static List<string> ModulesToRerun(Pipeline pipeline, IReadOnlyCollection<string
     if (unknown.Count > 0)
         throw new ArgumentException($"--rerun: unknown module(s) {string.Join(", ", unknown)}; pipeline has "
                                     + string.Join(", ", pipeline.Models.Select(m => m.Name)));
+    // A module that rewrites a column it reads (TrackletMerging: track_id) must see the column as its
+    // producer wrote it, not its own cached output: rerunning it brings back the earlier writers.
+    var modules = pipeline.Models.ToList();
+    var wanted = requested.ToHashSet();
+    for (var i = modules.Count - 1; i >= 0; i--)
+    {
+        if (!wanted.Contains(modules[i].Name))
+            continue;
+        var inPlace = modules[i].GetInputColumns("detection").Intersect(modules[i].GetOutputColumns("detection")).ToList();
+        foreach (var producer in modules.Take(i).Where(m => m.GetOutputColumns("detection").Intersect(inPlace).Any()))
+            wanted.Add(producer.Name);
+    }
     var dirty = new HashSet<string>();
     var result = new List<string>();
     foreach (var module in pipeline.Models)
     {
         var inputs = module.GetInputColumns("detection").Select(c => "detection:" + c)
             .Concat(module.GetInputColumns("image").Select(c => "image:" + c));
-        if (!requested.Contains(module.Name) && !inputs.Any(dirty.Contains))
+        if (!wanted.Contains(module.Name) && !inputs.Any(dirty.Contains))
             continue;
         result.Add(module.Name);
         foreach (var c in module.GetOutputColumns("detection")) dirty.Add("detection:" + c);

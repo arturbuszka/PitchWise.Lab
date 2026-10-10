@@ -446,3 +446,122 @@ Pomiar z cache `20261008-215833` (`RERUN=StrongSortModule,TorsoColor`, run `2026
   „Pełny” i „bez nr” wyszły wyżej niż przybliżenie (38.4 / 55.0), bo prawdziwe głosowanie na tor działa lepiej.
 - Zmiana przywraca zachowanie oryginału, a nie stroi parametrów, więc ryzyko przeuczenia pod 5 sekwencji jest małe.
   Pełnego biegu poza stałą piątką nadal nie było.
+
+### Sklejanie torów (`TrackletMerging`) — wdrożone (2026-10-09)
+
+Nowy moduł poziomu wideo [`TrackletMerging`](../src/PitchWise.GameState/Track/TrackletMerging.cs) to port prototypu z punktu 4 diagnozy fragmentacji.
+Stoi za `NbjwCalib`, bo potrzebuje `bbox_pitch`, i przed `MajorityVoteTracklet`. Czyta `track_id`, `bbox_pitch`, `embeddings`, `torso_color` i `role_detection`,
+a nadpisuje `track_id`: cały łańcuch fragmentów dostaje ID pierwszego toru.
+- **Config:** sekcja `tracklet_merging` z `enabled: false` i parametrami prototypu. Ma własny fingerprint w `PipelineConfig`.
+  Gdy moduł jest włączony, pipeline dokłada `TorsoColor` także przy `team.feature: embedding`.
+- **Ograniczenia i koszt** jak w prototypie, z jednym uzupełnieniem: jeśli jest tylko jeden wiarygodny tor zawodnika, nie da się go sklasyfikować do drużyny.
+  Wtedy i tak nie skleja się go z bramkarzem ani sędzią (w prototypie ten przypadek nie występuje).
+- **Odstęp w sekundach** liczony z `frame_rate` wideo; `BuildPipeline` dostał parametr `fps`, a jeśli go brakuje, przyjmowane jest 25.
+- **Zmiany w trybie cache**, bo to pierwszy moduł, który nadpisuje kolumnę, którą sam czyta:
+  - `OfflineTrackingEngine.ClearOutputs` nie czyści już takiej kolumny przed ponownym uruchomieniem modułu.
+    Wcześniej kasował `track_id` i moduł widział 0 torów.
+  - `--rerun TrackletMerging` dokłada wcześniejszego producenta kolumny (`StrongSortModule`). Bez tego moduł skleiłby ID już sklejone w cache.
+- **Testy:** 12 nowych (`TrackletMergingTests`), GameState.Tests 60/60.
+  Przy wyłączonym module zrzuty 5 sekwencji są bit w bit identyczne z runem `20261009-135233` (run kontrolny `20261009-170858`).
+
+**Zgodność z prototypem:** replika trackera w Pythonie daje te same `track_id` co C# w 100% detekcji, więc obie strony sklejają te same tory.
+Po sklejeniu podział ocenianych detekcji na tory jest identyczny we wszystkich 5 sekwencjach (0 rozbieżnych detekcji).
+Liczba linków też się zgadza: 102 (022: 23, 028: 13, 038: 11, 079: 24, 086: 31), z czego 63 poprawne, 28 błędnych i 11 z fałszywymi detekcjami.
+
+Pomiar z cache `20261008-215833` (`CONFIG` = kopia domyślnego configu z `tracklet_merging.enabled: true`, `RERUN=StrongSortModule,TorsoColor`, run `20261009-170459`), wynik łączny:
+
+| config | pełny HOTA | bez nr HOTA | pozycja HOTA | pozycja AssA | pełny per sekwencja (022/028/038/079/086) | bez nr per sekwencja | pozycja per sekwencja |
+|---|--:|--:|--:|--:|---|---|---|
+| baseline | 31.9 | 40.5 | 50.3 | 37.4 | 16.0 / 29.7 / 53.5 / 16.8 / 35.2 | 26.4 / 44.1 / 57.8 / 28.1 / 43.4 | 57.9 / 50.5 / 60.3 / 38.1 / 45.4 |
+| obecny domyślny (`color` + tracker zgodny z tracklab) | 39.3 | 55.8 | 57.4 | 48.7 | 45.8 / 32.7 / 56.2 / 19.8 / 38.0 | 69.5 / 56.1 / 62.9 / 46.4 / 46.9 | 70.0 / 61.3 / 64.1 / 47.6 / 47.7 |
+| **+ `tracklet_merging`** | **40.4** | **58.8** | **60.5** | **54.1** | 49.0 / 32.7 / 56.7 / 19.4 / 39.4 | 77.4 / 58.8 / 63.6 / 48.3 / 48.9 | 77.9 / 64.0 / 64.8 / 49.5 / 49.9 |
+
+- **Sama pozycja** zgadza się z prototypem co do dziesiątej części, łącznie i w każdej sekwencji (60.5, AssA 54.1).
+  Liczba ID spada z 364 do 262 (o liczbę linków).
+- **Wariant pełny** wyszedł 40.4, tak jak przybliżenie w prototypie. Wariant „bez numerów” wyszedł 58.8 wobec 58.2 z przybliżenia, bo prawdziwe głosowanie na tor działa lepiej.
+- **„Sama pozycja” i „bez numerów”** rosną w każdej sekwencji. Wariant pełny rośnie w 3 sekwencjach, w 028 stoi w miejscu, a w 079 spada o 0.4 (19.8 → 19.4).
+  W 079 DetA wariantu pełnego spada 11.4 → 10.3. Prawdopodobna przyczyna, jeszcze niesprawdzona: błędny link łączy dwie osoby, a głosowanie daje wtedy jeden numer na oba fragmenty.
+- **Korekta do opisu prototypu wyżej:** rozkład zysku „022 +9.0, 028 +0.2, …” nie pochodzi z wariantu τ = 0.1. Prototyp przeliczony ponownie przy τ = 0.1
+  daje te same liczby co C#: +7.9 / +2.7 / +0.7 / +1.9 / +2.2 (pozycja). Zysk jest więc mniej skupiony w 022, niż podawał ten opis.
+- **Parametry dobrane na tych samych 5 sekwencjach.** Moduł zostaje wyłączony, dopóki wynik nie potwierdzi się na innych sekwencjach.
+
+### Potwierdzenie na sekwencjach kontrolnych (2026-10-09)
+
+10 sekwencji valid spoza stałej piątki, wylosowanych raz ze stałym seedem: [`eval-sequences-holdout.txt`](eval-sequences-holdout.txt).
+Nic nie było na nich strojone. Skrypty przyjmują teraz inną listę sekwencji: `SEQS_FILE=<plik>` (`run_eval.sh`) albo `-SeqsFile` (`run_eval.ps1`).
+- Pełny bieg obecnego domyślnego configu z wyłączonym OCR (`jersey.enabled: false`): run `20261009-211433`, ok. 1 h 45 min, wszystkie modele na CUDA.
+- Pozostałe warianty z jego cache: baseline `20261009-225918`, poprzedni domyślny `20261009-230348`, sklejanie `20261009-230818`.
+- Bez OCR wariant „pełny” jest nieważny, więc go pomijam.
+
+Wynik łączny (10 sekwencji, 7138 klatek):
+
+| config | bez nr HOTA | pozycja HOTA | pozycja AssA |
+|---|--:|--:|--:|
+| baseline (stary tracker, `embedding`) | 23.4 | 47.6 | 36.5 |
+| poprzedni domyślny (stary tracker, `color`) | 27.3 | 47.6 | 36.5 |
+| obecny domyślny (`color` + tracker zgodny z tracklab) | 31.5 | 54.1 | 47.1 |
+| **+ `tracklet_merging`** | **34.0** | **57.7** | **53.6** |
+
+Sama pozycja per sekwencja (023 / 031 / 034 / 041 / 044 / 048 / 050 / 056 / 082 / 092):
+
+| config | HOTA |
+|---|---|
+| baseline | 34.6 / 40.5 / 42.7 / 68.0 / 44.1 / 44.3 / 36.1 / 74.3 / 45.2 / 46.9 |
+| obecny domyślny | 38.2 / 47.5 / 51.4 / 72.6 / 51.7 / 52.1 / 41.4 / 80.6 / 54.6 / 54.2 |
+| + `tracklet_merging` | 40.8 / 53.9 / 55.5 / 77.1 / 54.3 / 54.4 / 42.3 / 80.8 / 60.2 / 61.9 |
+
+Linki: 236 w 10 sekwencjach (17 / 33 / 21 / 9 / 32 / 37 / 7 / 4 / 34 / 42).
+
+- **Tracker zgodny z tracklab:** +6.5 w „samej pozycji” (47.6 → 54.1) i +10.6 AssA, poprawa w każdej z 10 sekwencji. Na stałej piątce było +7.1.
+- **Sklejanie:** kolejne +3.6 (54.1 → 57.7) i +6.5 AssA. Też poprawa w każdej sekwencji, od +0.2 (056, 4 linki) do +7.7 (092). Na stałej piątce było +3.1.
+  „Bez numerów” rośnie w 9 z 10 sekwencji, w 056 spada o 0.1.
+- **Kolor drużyn** (poprzedni domyślny vs baseline, ten sam tracker): +3.9 w „bez numerów”, ale nierówno.
+  Poprawa w 023, 031, 034, 044, 056 i 082. Wyraźne spadki w 041 (31.2 → 15.7) i 092 (27.1 → 18.4); 092 to jedna z dwóch sekwencji, w których reguła strony myli się już na GT.
+- **Nowy problem: „bez numerów” na tych sekwencjach jest bardzo niski** (31.5 wobec 55.8 na piątce).
+  DetA „bez numerów” wynosi ok. 25%, przy DetA „samej pozycji” 62%. Na piątce było 63% wobec 68%.
+  Na przykład 041 ma 72.6 w pozycji i 17.8 bez numerów. Przyczyny (zamiana stron, rola czy klasteryzacja) jeszcze nie sprawdziłem.
+
+**Decyzja (2026-10-10):** `tracklet_merging.enabled: true` w `configs/soccernet.yaml`, bo wynik potwierdził się na sekwencjach kontrolnych.
+Tabela między markerami to dalej baseline sprzed zmian. Szybki bieg z cache `20261008-215833` wymaga teraz tego samego `RERUN=StrongSortModule,TorsoColor`.
+`TrackletMerging` przelicza się sam, bo czyta `track_id`.
+
+### Diagnoza: niski wariant „bez numerów” na sekwencjach kontrolnych (2026-10-10)
+
+Analiza offline zrzutów obecnego configu: sekwencje kontrolne z runu `20261009-230818`, stała piątka z runu `20261009-170459`.
+Predykcje dopasowane do GT na boisku: Hungarian w każdej klatce, do 2 m.
+
+**1. Główna przyczyna to rola z PRTReid: cała jedna drużyna dostaje `referee`.**
+Zgodność ról na dopasowanych detekcjach:
+
+| sekwencja | 023 | 031 | 034 | 041 | 044 | 048 | 050 | 056 | 082 | 092 |
+|---|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|
+| rola zgodna z GT | 97% | 94% | 99% | **48%** | **45%** | **47%** | **43%** | **53%** | 100% | 100% |
+
+- W 041, 044, 048, 050 i 056 zawodnicy jednej drużyny z GT są prawie w całości `referee`, w 048 i 050 częściowo też `goalkeeper`.
+  Na przykład w 041 drużyna prawa: 18 detekcji `player`, 3887 `referee`, 137 `goalkeeper`; drużyna lewa jest prawie cała `player`.
+- Prawdziwi sędziowie dostają w tych sekwencjach rolę `player`.
+- Druga drużyna zostaje wtedy jedyną drużyną „zawodników”, więc KMeans dzieli ją na dwie. Stąd zgodność drużyny 18–73% w tych sekwencjach.
+- Na stałej piątce tego nie ma: zgodność ról 91–100%. Gorzej jest tylko w 028, gdzie bramkarz dostaje `player`, a część sędziów też `player`.
+- Bramkarz z GT dostaje rolę `player` w 7 z 10 sekwencji kontrolnych, czyli to samo zjawisko co w 028.
+
+**To nie błąd portu.** Na 305 wycinkach z GT sekwencji 041 model w PyTorch daje dokładnie te same role co nasz ONNX (305/305).
+Model w PyTorch był uruchomiony jak w sn-gamestate: `FeatureExtractor` z prtreid@30617a7, wycinki RGB z tracklab 1.3.24, wagi `prtreid-soccernet-baseline.pth.tar`.
+Model tak samo oznacza drużynę prawą jako `referee` (110 ze 124 wycinków). Preprocessing w C# (RGB, resize liniowy, normalizacja ImageNet) też odpowiada oryginałowi.
+Głowa ról nie uogólnia się więc na stroje spoza tego, na czym była trenowana.
+
+**2. Druga przyczyna: zamiana stron w 092.** Drużyny są podzielone poprawnie (czystość 96%), ale strony są odwrócone (zgodność 3.9%).
+To znany przypadek, w którym reguła średniego x myli się już na GT.
+
+**Wyrocznie** (etykieta toru = większość z dopasowanego GT; „bez numerów”, wynik łączny):
+
+| wariant | kontrolne (10) | stała piątka |
+|---|--:|--:|
+| obecny config | 34.0 | 58.8 |
+| poprawiona tylko zamiana stron (cała sekwencja) | 41.3 | 58.8 |
+| idealna drużyna toru, rola z modelu | 44.4 | 59.0 |
+| idealna rola toru, drużyna z pipeline'u | 37.2 | 58.8 |
+| idealna rola i drużyna toru | **57.3** | 59.8 |
+| *sama pozycja (górna granica)* | *57.7* | *60.5* |
+
+Na sekwencjach kontrolnych role i drużyny kosztują ok. 23 pkt, na piątce ok. 1.
+Sama poprawa drużyn daje tylko część zysku, bo toru z rolą `referee` nie obejmuje klasteryzacja drużyn. Pełny zysk wymaga poprawienia roli i drużyny razem.

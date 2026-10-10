@@ -10,6 +10,7 @@
 #     (every full run saves its state under <run>/cache)
 #   DOC=<file.md> writes the table there instead of docs/eval-baseline.md (experiments)
 #   CONFIG=<file.yaml> uses that pipeline config instead of configs/soccernet.yaml
+#   SEQS_FILE=<file.txt> uses that sequence list instead of docs/eval-sequences.txt (e.g. the holdout set)
 set -euo pipefail
 
 repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -18,7 +19,7 @@ dataset="${1:-$repo/data/SoccerNetGS}"
 split="${2:-valid}"
 config="${CONFIG:-configs/soccernet.yaml}"
 doc="${DOC:-docs/eval-baseline.md}"
-mapfile -t seqs < <(grep -v '^\s*#' docs/eval-sequences.txt | grep -v '^\s*$')
+mapfile -t seqs < <(grep -v '^\s*#' "${SEQS_FILE:-docs/eval-sequences.txt}" | grep -v '^\s*$')
 run="${RESCORE:-${RESUME:-data/eval-runs/$(date +%Y%m%d-%H%M%S)}}"
 mkdir -p "$run"
 

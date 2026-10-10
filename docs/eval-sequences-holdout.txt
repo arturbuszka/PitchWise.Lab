@@ -1,0 +1,13 @@
+# SoccerNet-GSR valid: 10 sekwencji kontrolnych do potwierdzania zmian poza stałą piątką (eval-sequences.txt).
+# Wybrane raz: sorted(random.Random(4242).sample(pozostałe 53 sekwencje valid po sortowaniu, 10)), Python 3.
+# Na nich niczego się nie stroi. Użycie: SEQS_FILE=docs/eval-sequences-holdout.txt tools/eval/run_eval.sh
+SNGS-023
+SNGS-031
+SNGS-034
+SNGS-041
+SNGS-044
+SNGS-048
+SNGS-050
+SNGS-056
+SNGS-082
+SNGS-092

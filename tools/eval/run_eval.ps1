@@ -9,6 +9,7 @@
 #     (every full run saves its state under <run>/cache)
 #   -Doc <file.md> writes the table there instead of docs/eval-baseline.md (experiments)
 #   -Config <file.yaml> uses that pipeline config instead of configs/soccernet.yaml
+#   -SeqsFile <file.txt> uses that sequence list instead of docs/eval-sequences.txt (e.g. the holdout set)
 param(
     [string]$Dataset,
     [string]$Split = "valid",
@@ -17,7 +18,8 @@ param(
     [string]$FromCache,
     [string]$Rerun = "",
     [string]$Doc = "docs/eval-baseline.md",
-    [string]$Config = "configs/soccernet.yaml"
+    [string]$Config = "configs/soccernet.yaml",
+    [string]$SeqsFile = "docs/eval-sequences.txt"
 )
 # native-command failures are checked via $LASTEXITCODE; "Stop" would turn dotnet stderr into terminating errors on PS 5.1
 $ErrorActionPreference = "Continue"
@@ -27,7 +29,7 @@ Set-Location $repo
 if (-not $Dataset) { $Dataset = Join-Path $repo "data/SoccerNetGS" }
 $config = $Config
 $doc = if ([System.IO.Path]::IsPathRooted($Doc)) { $Doc } else { Join-Path $repo $Doc }
-$seqs = Get-Content docs/eval-sequences.txt | Where-Object { $_ -notmatch '^\s*#' -and $_.Trim() }
+$seqs = Get-Content $SeqsFile | Where-Object { $_ -notmatch '^\s*#' -and $_.Trim() }
 $run = if ($Rescore) { $Rescore } elseif ($Resume) { $Resume } else { "data/eval-runs/$(Get-Date -Format yyyyMMdd-HHmmss)" }
 New-Item -ItemType Directory -Force $run | Out-Null
 

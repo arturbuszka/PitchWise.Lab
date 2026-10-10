@@ -29,6 +29,17 @@ track:  # StrongSORT hyperparameters
   kalman_noise: bpbreid          # bpbreid (tracklab, as sn-gamestate) | strongsort (original paper; with gating_uses_confidence: true
   gating_uses_confidence: false  #   and max_kalman_predictions_without_update: 8 = the tracker of the 2026-10-08 baseline)
 
+tracklet_merging:  # offline: joins a tracklet that ends to one starting later (same person after leaving the frame / occlusion)
+  enabled: true
+  max_gap_seconds: 10           # end -> start
+  max_distance_meters: 3        # pitch distance allowed: max_distance_meters + max_speed * gap
+  max_speed: 8                  # m/s
+  max_appearance_distance: 0.3  # cosine, mean ReID embeddings of the two tracklets
+  distance_weight: 0.3          # link cost = appearance + distance_weight * distance/allowed + gap_weight * gap/max_gap
+  gap_weight: 0.1
+  no_link_cost: 0.1             # links costing more are not made
+  min_team_detections: 10       # shorter tracklets have no reliable jersey colour: no same-team constraint
+
 pitch:
   enabled: auto
   kp_model: nbjw_kp.onnx

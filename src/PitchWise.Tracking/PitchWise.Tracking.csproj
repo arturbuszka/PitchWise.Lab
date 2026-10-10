@@ -11,4 +11,9 @@
     <PackageReference Include="OpenCvSharp4" Version="4.13.0.20260627" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Hungarian, for tracklet merging -->
+    <InternalsVisibleTo Include="PitchWise.GameState" />
+  </ItemGroup>
+
 </Project>

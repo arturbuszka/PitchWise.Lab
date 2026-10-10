@@ -29,6 +29,7 @@ public sealed class PipelineConfig
     public DetectorConfig BboxDetector { get; set; } = new();
     public ReidConfig Reid { get; set; } = new();
     public TrackConfig Track { get; set; } = new();
+    public TrackletMergingConfig TrackletMerging { get; set; } = new();
     public PitchConfig Pitch { get; set; } = new();
     public CalibrationConfig Calibration { get; set; } = new();
     public JerseyConfig Jersey { get; set; } = new();
@@ -75,6 +76,32 @@ public sealed class PipelineConfig
             "bpbreid" => StrongSort.KalmanNoise.BpbReid,
             "strongsort" => StrongSort.KalmanNoise.StrongSort,
             _ => throw new ArgumentException($"track.kalman_noise: unknown value '{KalmanNoise}' (expected bpbreid or strongsort)"),
+        };
+    }
+
+    /// <summary>Offline tracklet merging (<see cref="GameState.Track.TrackletMerging"/>); off unless enabled.</summary>
+    public sealed class TrackletMergingConfig
+    {
+        public bool Enabled { get; set; }
+        public double MaxGapSeconds { get; set; } = 10;
+        public double MaxDistanceMeters { get; set; } = 3;
+        public double MaxSpeed { get; set; } = 8;
+        public double MaxAppearanceDistance { get; set; } = 0.3;
+        public double DistanceWeight { get; set; } = 0.3;
+        public double GapWeight { get; set; } = 0.1;
+        public double NoLinkCost { get; set; } = 0.1;
+        public int MinTeamDetections { get; set; } = 10;
+
+        public TrackletMergingOptions ToOptions() => new()
+        {
+            MaxGapSeconds = MaxGapSeconds,
+            MaxDistanceMeters = MaxDistanceMeters,
+            MaxSpeed = MaxSpeed,
+            MaxAppearanceDistance = MaxAppearanceDistance,
+            DistanceWeight = DistanceWeight,
+            GapWeight = GapWeight,
+            NoLinkCost = NoLinkCost,
+            MinTeamDetections = MinTeamDetections,
         };
     }
 
@@ -143,6 +170,7 @@ public sealed class PipelineConfig
             [nameof(YoloOnnxDetector)] = Fingerprint(BboxDetector, BboxDetector.Model),
             [nameof(PrtReidOnnx)] = Fingerprint(Reid, Reid.Model),
             [nameof(StrongSortModule)] = Fingerprint(Track),
+            [nameof(GameState.Track.TrackletMerging)] = Fingerprint(TrackletMerging),
             [nameof(NbjwCalibKeypoints)] = Fingerprint(Pitch, Pitch.KpModel, Pitch.LinesModel),
             [nameof(NbjwCalib)] = Fingerprint(Calibration),
             [nameof(MmocrOnnx)] = Fingerprint(Jersey, Jersey.DetModel, Jersey.RecModel, Jersey.Charset),
@@ -152,12 +180,12 @@ public sealed class PipelineConfig
         };
     }
 
-    /// <summary>Builds the tracking pipeline for one video resolution.</summary>
+    /// <summary>Builds the tracking pipeline for one video resolution and frame rate.</summary>
     /// <remarks>
     /// Sets the static OnnxSessions.Provider/DeviceId as a side effect, so two pipelines with
     /// different providers must not be built concurrently.
     /// </remarks>
-    public Pipeline BuildPipeline(int imWidth, int imHeight, ILogger? log = null)
+    public Pipeline BuildPipeline(int imWidth, int imHeight, ILogger? log = null, double fps = 25)
     {
         string Model(string name) => Path.Combine(ModelsDir, name);
         bool Exists(params string[] names) => names.All(n => File.Exists(Model(n)));
@@ -200,7 +228,7 @@ public sealed class PipelineConfig
         var teamFeature = Team.ParsedFeature;
         if (hasReid)
             modules.Add(new PrtReidOnnx(Model(Reid.Model), Reid.BatchSize));
-        if (hasReid && teamFeature == TeamFeature.Color)
+        if (hasReid && (teamFeature == TeamFeature.Color || TrackletMerging.Enabled))
             modules.Add(new TorsoColor());
         modules.Add(new StrongSortModule(new StrongSortOptions
         {
@@ -219,6 +247,13 @@ public sealed class PipelineConfig
         {
             modules.Add(new NbjwCalibKeypoints(Model(Pitch.KpModel), Model(Pitch.LinesModel)));
             modules.Add(new NbjwCalib(imWidth, imHeight, Calibration.UsePrevHomography));
+        }
+        if (TrackletMerging.Enabled)
+        {
+            if (!hasReid || !hasCalib)
+                throw new InvalidOperationException(
+                    "tracklet_merging needs reid (embeddings, role_detection) and calibration (bbox_pitch)");
+            modules.Add(new TrackletMerging(TrackletMerging.ToOptions(), fps, log));
         }
         if (hasOcr)
             modules.Add(new MmocrOnnx(Model(Jersey.DetModel), Model(Jersey.RecModel), Model(Jersey.Charset)));

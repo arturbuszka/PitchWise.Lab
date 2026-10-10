@@ -111,12 +111,14 @@ public sealed class OfflineTrackingEngine
 
     /// <summary>Drops a rerun module's previous outputs, so rows it no longer writes (e.g.
     /// detections a retuned tracker leaves unassigned) do not keep stale cached values.</summary>
+    /// <remarks>A column the module also reads (rewritten in place, e.g. track_id by tracklet merging)
+    /// is kept: it is the module's input, and the caller reruns its producer first.</remarks>
     private static void ClearOutputs(Module module, DataFrame detections, DataFrame imagePreds)
     {
-        foreach (var column in module.GetOutputColumns("detection"))
+        foreach (var column in module.GetOutputColumns("detection").Except(module.GetInputColumns("detection")))
             foreach (var row in detections.Rows)
                 row[column] = null;
-        foreach (var column in module.GetOutputColumns("image"))
+        foreach (var column in module.GetOutputColumns("image").Except(module.GetInputColumns("image")))
             foreach (var row in imagePreds.Rows)
                 row[column] = null;
     }
