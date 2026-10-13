@@ -71,6 +71,16 @@ public sealed class PipelineConfig
         /// <summary>bpbreid (tracklab, aspect-ratio noise scales with box height) | strongsort (original paper constants).</summary>
         public string KalmanNoise { get; set; } = "bpbreid";
         public bool GatingUsesConfidence { get; set; } = false;
+        /// <summary>Camera motion compensation: none (sn-gamestate) | ecc (tracklab ecc.py) | flow (sparse optical flow).</summary>
+        public string CameraMotion { get; set; } = "none";
+
+        public CameraMotionMode ParsedCameraMotion => CameraMotion.ToLowerInvariant() switch
+        {
+            "none" => CameraMotionMode.None,
+            "ecc" => CameraMotionMode.Ecc,
+            "flow" => CameraMotionMode.Flow,
+            _ => throw new ArgumentException($"track.camera_motion: unknown value '{CameraMotion}' (expected none, ecc or flow)"),
+        };
 
         public StrongSort.KalmanNoise ParsedKalmanNoise => KalmanNoise.ToLowerInvariant() switch
         {
@@ -268,7 +278,7 @@ public sealed class PipelineConfig
             MaxKalmanPredictionsWithoutUpdate = Track.MaxKalmanPredictionsWithoutUpdate,
             KalmanNoise = Track.ParsedKalmanNoise,
             GatingUsesConfidence = Track.GatingUsesConfidence,
-        }));
+        }, Track.ParsedCameraMotion));
         if (hasCalib)
         {
             modules.Add(new NbjwCalibKeypoints(Model(Pitch.KpModel), Model(Pitch.LinesModel)));

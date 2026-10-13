@@ -709,3 +709,136 @@ Bez korekty ról odwrócone wyglądały też 041 (18%), 048 (40%) i 056 (37%). T
 
 **Wniosek:** reguły lepszej od średniego x nie znalazłem. Na obecnych 15 sekwencjach jedyna zła strona to błąd GT, więc modułu nie dodaję.
 Punkt 2 kolejki można zamknąć. Wraca, jeśli na nowych danych pojawią się zamiany stron przy poprawnych etykietach.
+
+### Kompensacja ruchu kamery w trackerze (`track.camera_motion`) (2026-10-10)
+
+Problem z diagnozy fragmentacji: po przerwie dłuższej niż 7 klatek predykcja Kalmana staje w miejscu w obrazie, a kamera się przesuwa.
+Oryginał ma na to ECC (`bpbreid_strong_sort/ecc.py`), ale w sn-gamestate jest ono wyłączone (`ecc: False`).
+
+**1. Jakość estymacji ruchu kamery** (analiza na GT, sekwencje 022, 028, 030, 045, 079, 090).
+- Wzorzec: homografia obraz→boisko w każdej klatce, dopasowana do stóp z boxów GT i ich `bbox_pitch_raw`.
+  Prawdziwy ruch płaszczyzny boiska w obrazie między t i t+g to `inv(H[t+g]) · H[t]`.
+- Błąd zmierzony na stopach GT z klatki t, w wysokościach boxa (mediana):
+
+| przerwa | bez CMC | ECC Euclidean, skala 0.1 (tracklab) | ECC affine | przepływ optyczny (LK + RANSAC, podobieństwo, maska boxów) |
+|---|---|---|---|---|
+| 10 klatek | 0.19–1.15 | 0.12–0.18 | 0.11–0.26 | **0.05–0.14** |
+| 50 klatek | 0.59–6.24 | 0.42–0.70 | 0.37–1.32 | **0.13–0.54** |
+
+- Przepływ optyczny jest najdokładniejszy, zwłaszcza przy dłuższych przerwach. Euclidean z tracklab nie ma skali, więc nie łapie zoomu.
+
+**2. Implementacja** (domyślnie wyłączona, zachowanie bez zmian):
+- StrongSort.NET: `StrongSortTracker.Update(observations, cameraMotion)` przyjmuje opcjonalną macierz 3×3 (piksele poprzedniej klatki → bieżąca).
+  Po predykcji przesuwa box każdego toru jak `Track.camera_update` w tracklab: przekształca dwa rogi, prędkości i kowariancji nie rusza.
+  Testy: StrongSort.Tests 17/17 (3 nowe).
+- PitchWise: [`CameraMotion`](../src/PitchWise.GameState/Track/CameraMotion.cs) liczy macierz z obrazów w `StrongSortModule`; config `track.camera_motion`:
+  - `none` (domyślnie);
+  - `ecc`: jak `ecc.py` z tracklab (Euclidean, skala 0.1, 100 iteracji, eps 1e-5, `get_matrix`);
+  - `flow`: rogi poza boxami osób z poprzedniej klatki, LK, `estimateAffinePartial2D` z RANSAC, skala 0.5.
+- Testy: GameState.Tests 71/71 (3 nowe, `CameraMotionTests`).
+- Przy `none` zrzuty piątki są bit w bit identyczne z runem `20261010-154834` (run `20261010-212138`).
+- Koszt: `StrongSortModule` 0.01 → 0.03–0.04 s/klatkę, głównie wczytanie obrazów.
+
+**3. Pomiar z cache** (obecny domyślny config + `camera_motion`; piątka: `20261008-215833`, `RERUN=StrongSortModule,TorsoColor`; kontrolne: `20261009-211433`, `RERUN=TrackletMerging`, bez OCR):
+
+| config | piątka pełny | piątka bez nr | piątka pozycja | piątka pozycja AssA | kontrolne bez nr | kontrolne pozycja | kontrolne pozycja AssA |
+|---|--:|--:|--:|--:|--:|--:|--:|
+| baseline | 31.9 | 40.5 | 50.3 | 37.4 | 23.4 | 47.6 | 36.5 |
+| obecny domyślny (`none`) | 41.0 | 59.4 | 60.5 | 54.1 | 47.2 | 57.7 | 53.6 |
+| `ecc` (runy `20261010-212406`, `20261010-213125`) | 42.9 | 61.8 | 62.6 | 57.9 | 44.4 | 57.6 | 53.3 |
+| `flow` (runy `20261010-212755`, `20261010-213748`) | 42.6 | 61.2 | 62.2 | 57.3 | 48.4 | 57.7 | 53.5 |
+
+Pozycja HOTA per sekwencja (`none` / `ecc` / `flow`):
+
+| piątka | 022 | 028 | 038 | 079 | 086 |
+|---|---|---|---|---|---|
+| | 77.9 / 78.0 / 77.3 | 64.0 / **61.4** / **62.4** | 64.8 / 66.8 / 67.0 | 49.5 / 52.3 / 51.3 | 49.9 / **56.5** / **55.6** |
+
+| kontrolne | 023 | 031 | 034 | 041 | 044 | 048 | 050 | 056 | 082 | 092 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| | 40.8 / 39.6 / 40.5 | 53.9 / **51.1** / 53.9 | 55.5 / **52.5** / **51.4** | 77.1 / 78.5 / 77.3 | 54.3 / 54.6 / 53.7 | 54.4 / 56.6 / 56.2 | 42.3 / 43.1 / 43.2 | 80.8 / 79.0 / 80.2 | 60.2 / 59.1 / 60.0 | 61.9 / 63.7 / 63.2 |
+
+Bez numerów, kontrolne: 023 40.9 / 39.2 / 40.6, 031 51.0 / 48.3 / 52.8, 034 55.0 / 51.0 / 50.0, 041 71.4 / 73.0 / 71.8, 044 43.8 / 46.2 / 44.9,
+048 39.3 / 42.3 / 43.2, 050 38.1 / 37.5 / 40.6, 056 57.7 / **26.5** / 63.1, 082 58.7 / 58.2 / 59.7, 092 19.4 / 18.8 / 18.7.
+
+- **Piątka:** +2.1 (`ecc`) i +1.7 (`flow`) w „samej pozycji”. Zysk pochodzi z 038, 079 i 086; 028 traci 1.6–2.6.
+- **Kontrolne:** w „samej pozycji” bez zmian (57.7 → 57.6 / 57.7). Poprawa w 041, 048, 050 i 092, spadki w 023, 031, 034 i 082 (034 traci 3–4 pkt).
+- **Skok w „bez numerów” to w dużej mierze strona drużyn, a nie tracking.** 056 przy `ecc` ma odwrócone strony (zgodność drużyny zawodników 29% wobec 99%),
+  przy pozycji prawie bez zmian. 056 to znana granica reguły średniego x (0.0 m na GT).
+- Liczba ID i rozbicie osób GT na ID spadają w prawie każdej sekwencji. Mimo to AssA w 028, 031, 034 i 082 spada.
+  Przykład z 028 (tory bez sklejania): zawodnik zasłonięty przez ok. 47 klatek biegnie razem z kamerą. Kamera przesuwa obraz o ok. −13 px/klatkę, a zawodnik w obrazie tylko o −4 px/klatkę.
+  Bez CMC zamrożony box czeka bliżej niego i tor wraca. Z CMC box odjeżdża z kamerą i zawodnik dostaje nowe ID.
+
+**4. Dlaczego zysk jest niestabilny: która hipoteza ruchu trafia lepiej** (GT 18 sekwencji z trzech meczów, prawdziwy ruch kamery z homografii GT).
+Błąd przewidzianego położenia stóp po przerwie, w wysokościach boxa: mediana (udział < 0.5 boxa). Prędkość to średnia z 5 klatek przed przerwą.
+
+| przerwa | stoi w obrazie | 7 klatek prędkości w obrazie (tracklab bez ECC, obecnie) | stoi na boisku | 7 klatek prędkości na boisku (tracklab z ECC) | stała prędkość na boisku |
+|---|---|---|---|---|---|
+| 5 | 0.20 (80%) | 0.11 (91%) | 0.18 (86%) | 0.11 (89%) | 0.11 (89%) |
+| 10 | 0.39 (59%) | **0.17 (84%)** | 0.32 (67%) | 0.20 (82%) | 0.20 (80%) |
+| 25 | 0.92 (31%) | 0.71 (38%) | 0.73 (37%) | 0.59 (44%) | **0.49 (50%)** |
+| 50 | 1.71 (18%) | 1.52 (20%) | 1.39 (23%) | 1.26 (24%) | **1.15 (24%)** |
+| 100 | 2.88 (9%) | 2.78 (9%) | 2.63 (13%) | **2.53 (13%)** | 2.93 (8%) |
+
+- Kamera transmisyjna podąża za akcją, więc część zawodników porusza się razem z nią. Dla nich „stoi w obrazie” jest lepszym założeniem niż „stoi na boisku”.
+  Przy przerwie do ok. 10 klatek CMC w wersji z tracklab trafia więc nieco gorzej niż obecny tracker. Lepiej trafia dopiero przy dłuższych przerwach,
+  ale wtedy błąd obu wersji (≥ 0.6 boxa) jest już zwykle poza bramką ruchu.
+  W części sekwencji (np. 021, 030, 081, 094) CMC przegrywa nawet przy przerwie 50 klatek.
+- Lepsza estymacja ruchu kamery (`flow`) tego nie zmienia. Ogranicza ją założenie o ruchu osoby, a nie dokładność macierzy.
+
+**Wniosek:** CMC jak w tracklab daje zysk na piątce (+1.7–2.1), ale na sekwencjach kontrolnych wynik stoi w miejscu przy dużym rozrzucie per sekwencja.
+Zostaje w kodzie z `camera_motion: none`. Możliwe dalsze kroki (niesprawdzone, każdy rusza wyniki):
+- CMC tylko dla torów bez aktualizacji dłużej niż 7 klatek, czyli tam, gdzie predykcja Kalmana już stoi; krótkie przerwy zostają jak w tracklab;
+- dalsza predykcja prędkością na boisku po CMC (najlepsza hipoteza przy przerwach 25–50 klatek);
+- bramka ruchu rozszerzana z czasem od ostatniej aktualizacji, tak żeby o powrocie decydował wygląd.
+
+### Diagnoza: numery koszulek (2026-10-11)
+
+Analiza offline na stałej piątce. Kod bez zmian.
+- Tory i surowe odczyty OCR pochodzą z cache obecnego configu: te same `track_id` co w runie `20261010-154834`, sprawdzone.
+- Detekcje dopasowane do boxów GT w obrazie: IoU ≥ 0.5, Hungarian per klatka.
+- Wyrocznie to zrzuty runu `20261010-154834` z podmienionym numerem, przeliczone `eval-combine`.
+
+**1. Ile kosztują numery.** Wariant pełny, wynik łączny (022 / 028 / 038 / 079 / 086 w nawiasie):
+
+| wariant | pełny HOTA |
+|---|---|
+| obecny config | 41.0 (49.0 / 37.3 / 56.7 / 19.4 / 39.4) |
+| idealne wstrzymanie się: numer toru zostaje, gdy dobry, inaczej brak numeru | 43.6 (58.4 / 39.1 / 56.7 / 22.3 / 39.2) |
+| idealne głosowanie z obecnych odczytów: numer z GT, jeśli OCR choć raz go odczytał w torze | 49.5 (66.1 / 52.5 / 58.8 / 27.0 / 44.8) |
+| idealny numer toru (większość z GT, także „brak numeru”) | **58.5** (77.0 / 63.3 / 62.7 / 47.3 / 47.0) |
+| idealny numer detekcji | 57.6 |
+| *bez numerów (dla porównania)* | *59.4* |
+
+- Numery kosztują ok. 17.5 pkt. Lepsze głosowanie z obecnych odczytów może odzyskać do ok. 8.5 pkt. Reszta, ok. 9 pkt, wymaga odczytów, których OCR nie daje.
+- „Idealny numer detekcji” wychodzi niżej niż „idealny numer toru”, bo detekcje niedopasowane do GT zostają z numerem toru.
+
+**2. Zawodnicy bez numeru w GT.** 11% detekcji zawodników w GT piątki nie ma numeru: 20% w 022 i 079, 0% w 038. To całe tory (2–4 osoby na sekwencję).
+- Metryka porównuje atrybuty jako całość, więc taki zawodnik pasuje tylko do predykcji bez numeru. Tak samo w oryginale.
+- Pipeline podaje numer prawie zawsze: bez numeru jest 2–4% predykcji zawodników, w 079 17%. Wystarcza do tego jeden odczyt w torze.
+
+**3. OCR.** Odczyt ma 16% detekcji zawodników z GT, a poprawnych jest 59% odczytów.
+Odsetek odczytów rośnie z wysokością boxa: < 80 px: 3%, 80–100 px: 8%, 100–130 px: 12%, > 130 px: 28%. Trafność odczytów nie zależy od wysokości (58–59%).
+W 079 OCR czyta tylko 6% detekcji, z czego 26% poprawnie.
+
+**4. Błędy na poziomie toru** (udział detekcji zawodników z GT, tor przypisany osobie większościowej; „odczyty” to mediana liczby odczytów w torze):
+
+| przypadek | udział | odczyty | udział zwycięzcy w głosach |
+|---|--:|--:|--:|
+| poprawny numer | 48.9% | 83 | 0.76 |
+| prawdziwy numer nigdy nie odczytany | 19.8% | 5 | 0.65 |
+| ... w tym wygrał fragment prawdziwego numeru (np. „4” zamiast „14”) | 4.1% | 15 | 0.35 |
+| prawdziwy odczytany, wygrał inny numer | 8.7% | 21 | 0.44 |
+| prawdziwy odczytany, wygrał jego fragment | 6.3% | 61 | 0.52 |
+| bez numeru w GT, pipeline podaje numer | 7.4% | 5 | 0.55 |
+| brak odczytów w torze | 2.9% | 0 | — |
+| bez numeru w GT i w predykcji | 1.8% | 0 | — |
+
+- Błędne numery mają mało dowodów: mediana 5 odczytów wobec 83 przy poprawnych, a zwycięzca ma mniejszy udział w głosach.
+  Próg „za mało odczytów → brak numeru” trafiłby w przypadek „bez numeru w GT”. Wyrocznia wstrzymania się pokazuje jednak, że to najwyżej +2.6 pkt.
+- Fragmenty numeru (10.4% razem) to typowy błąd odczytu dwucyfrowego numeru jako jednej cyfry. Głosowanie premiujące dwucyfrowy numer zawierający zwycięską cyfrę mogłoby część z tego odzyskać.
+- Ok. 8% detekcji należy do torów mieszających dwie osoby (najwięcej w 086: 16%). Głosowanie daje wtedy jeden numer obu.
+
+**Wniosek:** największa dźwignia to sam OCR: 16% odczytów i 59% trafności, a ok. 9 pkt jest poza zasięgiem jakiegokolwiek głosowania.
+Tanie poprawki głosowania (fragmenty cyfr, wstrzymanie się przy słabych dowodach, roster jako lista dozwolonych numerów) mają razem zapas do ok. 8.5 pkt.
+Uwaga: wszystko to na stałej piątce. Na sekwencjach kontrolnych wariantu pełnego nie ma, bo nie było biegu z OCR.

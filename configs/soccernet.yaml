@@ -28,6 +28,7 @@ track:  # StrongSORT hyperparameters
   max_kalman_predictions_without_update: 7
   kalman_noise: bpbreid          # bpbreid (tracklab, as sn-gamestate) | strongsort (original paper; with gating_uses_confidence: true
   gating_uses_confidence: false  #   and max_kalman_predictions_without_update: 8 = the tracker of the 2026-10-08 baseline)
+  camera_motion: none            # none (sn-gamestate) | ecc (tracklab ecc.py) | flow (sparse optical flow): moves tracks with the camera
 
 tracklet_merging:  # offline: joins a tracklet that ends to one starting later (same person after leaving the frame / occlusion)
   enabled: true
