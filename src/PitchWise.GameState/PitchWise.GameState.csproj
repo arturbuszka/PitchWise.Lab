@@ -3,12 +3,10 @@
   <ItemGroup>
     <ProjectReference Include="..\PitchWise.Tracking\PitchWise.Tracking.csproj" />
     <ProjectReference Include="..\PitchWise.Engine\PitchWise.Engine.csproj" />
-    <!-- StrongSort.NET from the sibling repo (../StrongSort.NET) while the tracker is being aligned with tracklab;
-         switch back to the StrongSort.Net package once a new version is published. -->
-    <ProjectReference Include="..\..\..\StrongSort.NET\src\StrongSort\StrongSort.csproj" />
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="StrongSort.Net" Version="2.0.0" />
     <PackageReference Include="Microsoft.AI.DirectML" Version="1.15.4" />
     <PackageReference Include="Microsoft.ML.OnnxRuntime.DirectML" Version="1.24.4" Condition="!$([MSBuild]::IsOSPlatform('Linux'))" />
     <PackageReference Include="Microsoft.ML.OnnxRuntime.Gpu.Linux" Version="1.24.4" Condition="$([MSBuild]::IsOSPlatform('Linux'))" />
