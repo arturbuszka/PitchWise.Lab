@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using PitchWise.Engine;
+using PitchWise.Engine.Rules;
 using PitchWise.GameState.WorldState;
 using PitchWise.GameState.Calibration;
 using PitchWise.GameState.Configuration;
@@ -71,6 +72,9 @@ return args switch
         rest.Length > 0 ? rest[0] : null,
         rest.Length > 1 ? int.Parse(rest[1]) : 0,
         rest.Length > 2 ? double.Parse(rest[2]) : 0),
+    ["analyze", var video, var outDir, .. var rest] => Analyze(video, outDir,
+        rest.Length > 0 ? rest[0] : null,
+        rest.Length > 1 ? int.Parse(rest[1]) : 0),
     ["eval", var dataset, var split, var video, .. var rest] => Eval(dataset, split, video,
         rest.Length > 0 ? rest[0] : null,
         rest.Length > 1 ? int.Parse(rest[1]) : 0),
@@ -85,6 +89,8 @@ int Usage()
           render <dataset_path> <split> <video_name> <out.mp4>   render dataset ground truth
           track <video.mp4> <out.mp4> [models_dir] [max_frames] [start_seconds]  run the pipeline on any video
           stats <video.mp4> <out.json> [models_dir] [max_frames] [start_seconds] run the pipeline + collect match statistics
+          analyze <video.mp4> <out_dir> [models_dir] [max_frames]                for other programs: writes result.json,
+                                                                        world_state.jsonl and render.mp4; prints "PROGRESS 0.42"
           eval <dataset_path> <split> <video_name> [models_dir] [max_frames]     run pipeline + GS-HOTA vs ground truth
                                                                         (--dump <file.json> saves metrics + detections,
                                                                          --cache <dir> saves the pipeline state,
@@ -146,9 +152,64 @@ int Track(string videoPath, string output, string? modelsDir, int maxFrames, dou
 
     log.LogInformation("Rendering to {Output}", output);
     using var renderer = new GameStateVideoRenderer();
-    renderer.RenderVideo(state, videoId, output);
+    renderer.RenderVideo(state, videoId, output, set.VideoMetadatas.Rows.First().GetOrDefault<long>("frame_rate"));
     log.LogInformation("Done");
     return 0;
+}
+
+// The entry point for programs that run this CLI as a separate process: everything goes in one
+// folder, in the documented formats, and a failure is a non-zero exit code.
+int Analyze(string videoPath, string outDir, string? modelsDir, int maxFrames)
+{
+    Directory.CreateDirectory(outDir);
+    var framesDir = Path.Combine(outDir, "frames");
+    var jsonlPath = Path.Combine(outDir, "world_state.jsonl");
+    try
+    {
+        var set = ExternalVideo.Load(videoPath, framesDir, maxFrames: maxFrames);
+        var video = set.VideoMetadatas.Rows.First();
+        var videoId = video.Get<long>("id");
+        var fps = video.Get<long>("frame_rate");
+
+        var pipeline = BuildPipeline(modelsDir, video);
+        var state = new TrackerState(set);
+        var lastPercent = -1;
+        new OfflineTrackingEngine(pipeline, state, log)
+        {
+            Progress = new InlineProgress(tick =>
+            {
+                var percent = (int)(100 * (tick.ModuleIndex + tick.ModuleFraction) / tick.ModuleCount);
+                if (percent == lastPercent) return;
+                lastPercent = percent;
+                Console.WriteLine(FormattableString.Invariant($"PROGRESS {percent / 100.0:F2}"));
+            }),
+        }.TrackDataset();
+
+        var (detections, imagePreds) = state.Load(videoId);
+        var observations = ObservationAdapter.ToObservations(detections, imagePreds, fps);
+        MatchStatsReport report;
+        using (var dump = WorldStateJsonl.TryCreate(jsonlPath,
+            new WorldStateJsonl.Header(fps, FrameStride: 1, PitchLength: 105, PitchWidth: 68, NormalizedCoords: false)))
+        {
+            report = new MatchStatsCollector().Run(observations, (obs, _) => dump?.Append(obs));
+        }
+
+        var cfg = new EngineConfig();
+        var events = WorldStateReplay.Run(jsonlPath, [new PassRule(cfg), new PossessionRule()], cfg).Events;
+
+        using (var renderer = new GameStateVideoRenderer())
+            renderer.RenderVideo(state, videoId, Path.Combine(outDir, "render.mp4"), fps);
+
+        // written last, so its presence means the whole analysis finished
+        File.WriteAllText(Path.Combine(outDir, "result.json"),
+            JsonSerializer.Serialize(AnalysisResult.Create(fps, report, events), AnalysisResult.JsonOptions));
+        log.LogInformation("Done: {Frames} frames, {Events} events", report.FramesProcessed, events.Count);
+        return 0;
+    }
+    finally
+    {
+        if (Directory.Exists(framesDir)) Directory.Delete(framesDir, recursive: true);
+    }
 }
 
 int Stats(string videoPath, string output, string? modelsDir, int maxFrames, double startSeconds = 0)
@@ -405,3 +466,10 @@ static PitchWise.Tracking.Datastruct.TrackingSet TrimSet(PitchWise.Tracking.Data
 
 record EvalDump(string Video, int Frames, HotaResult Full, HotaResult NoJersey, HotaResult PositionOnly,
     List<long> ImageIds, List<IReadOnlyList<GsDetection>> Gt, List<IReadOnlyList<GsDetection>> Pred);
+
+/// <summary>Reports on the calling thread, unlike <see cref="Progress{T}"/>, which posts to the thread
+/// pool and could print lines out of order.</summary>
+sealed class InlineProgress(Action<TrackingProgress> report) : IProgress<TrackingProgress>
+{
+    public void Report(TrackingProgress value) => report(value);
+}
