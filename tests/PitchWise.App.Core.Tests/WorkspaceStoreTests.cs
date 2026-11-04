@@ -154,19 +154,23 @@ public class WorkspaceStoreTests : IDisposable
         _store.DeleteJob(paths);   // idempotent: deleting twice is not an error
     }
 
+    /// <summary>An absolute path on whichever OS runs the tests; "d:\\x" is relative on Linux.</summary>
+    private static string Rooted(params string[] parts) =>
+        Path.Combine([Path.GetPathRoot(Path.GetTempPath())!, .. parts]);
+
     [Fact]
     public void ResolveDisplayName_NamesJobsAfterTheirSource()
     {
         Assert.Equal("SNGS-021", new AnalysisRequest
         {
             SourceKind = SourceKind.SoccerNetVideo,
-            SourcePath = @"d:\data\SoccerNetGS\valid\SNGS-021",
+            SourcePath = Rooted("data", "SoccerNetGS", "valid", "SNGS-021"),
         }.ResolveDisplayName());
 
         Assert.Equal("match-clip", new AnalysisRequest
         {
             SourceKind = SourceKind.VideoFile,
-            SourcePath = @"d:\videos\match-clip.mp4",
+            SourcePath = Rooted("videos", "match-clip.mp4"),
         }.ResolveDisplayName());
 
         // SoccerNet frames live in <video>/img1, so the video is the useful name — and a
@@ -174,20 +178,20 @@ public class WorkspaceStoreTests : IDisposable
         Assert.Equal("SNGS-021", new AnalysisRequest
         {
             SourceKind = SourceKind.FrameSequence,
-            SourcePath = @"d:\data\SNGS-021\img1\",
+            SourcePath = Rooted("data", "SNGS-021", "img1") + Path.DirectorySeparatorChar,
         }.ResolveDisplayName());
 
         // a frames folder that names itself keeps its own name
         Assert.Equal("second-half", new AnalysisRequest
         {
             SourceKind = SourceKind.FrameSequence,
-            SourcePath = @"d:\captures\second-half",
+            SourcePath = Rooted("captures", "second-half"),
         }.ResolveDisplayName());
 
         Assert.Equal("custom", new AnalysisRequest
         {
             SourceKind = SourceKind.VideoFile,
-            SourcePath = @"d:\videos\match.mp4",
+            SourcePath = Rooted("videos", "match.mp4"),
             DisplayName = "custom",
         }.ResolveDisplayName());
     }
