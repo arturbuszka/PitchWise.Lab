@@ -1,48 +1,54 @@
 # PitchWise — Vision & Game State
 
-The vision and game-state engine of **PitchWise**, a football analytics platform. From a raw
-broadcast video (1080p, main camera) the pipeline reconstructs the *game state*: the position of
-every person in pitch coordinates, plus their role (player / goalkeeper / referee), team
-(left / right) and jersey number. The tracking quality metric is GS-HOTA.
+[![CI](https://github.com/arturbuszka/PitchWise.Lab/actions/workflows/ci.yml/badge.svg)](https://github.com/arturbuszka/PitchWise.Lab/actions/workflows/ci.yml)
 
-This repository is the vision half of PitchWise. A separate platform (streaming, highlight cutting,
-etc.) is built alongside it and consumes the world-state this engine produces.
+From a raw football broadcast (1080p, main camera), this .NET pipeline reconstructs the *game state*:
+every person's position in pitch coordinates, plus their role (player, goalkeeper or referee), team
+and jersey number.
 
 It is a .NET port of the SoccerNet
 [Game State Reconstruction](https://www.soccer-net.org/tasks/game-state-reconstruction) baseline
 ([sn-gamestate](https://github.com/SoccerNet/sn-gamestate) +
-[TrackLab](https://github.com/TrackingLaboratory/tracklab)).
+[TrackLab](https://github.com/TrackingLaboratory/tracklab)), which is written in Python. Here the
+neural networks run through ONNX Runtime with no Python at runtime, and the tracker is my own
+[StrongSort.Net](https://github.com/arturbuszka/StrongSort.NET) package.
+
+This is the vision half of PitchWise. The backend, which handles uploads, job queues, highlight
+reels and HLS delivery, is in [PitchWise.Platform](https://github.com/arturbuszka/PitchWise.Platform).
 
 Licensed under **GPL-3.0** — see [LICENSE](LICENSE) and [NOTICE](NOTICE).
 
-## Architecture
+## Results
 
-| Original (Python) | .NET | Status |
-|---|---|---|
-| `tracklab.pipeline.Module` / `Pipeline` | `PitchWise.Tracking.Pipeline.Module` / `Pipeline` (I/O column validation) | ✅ |
-| `ImageLevel/DetectionLevel/VideoLevelModule` | equivalent abstract classes | ✅ |
-| `pandas.DataFrame` (detections / metadata) | `PitchWise.Tracking.Datastruct.DataFrame`/`Series` (dynamic columns, merge by index) | ✅ |
-| `TrackerState`, `TrackingDataset` | `TrackerState`, `TrackingSet` (JSON persistence) | ✅ (simplified) |
-| `engine.offline.OfflineTrackingEngine` | `PitchWise.Tracking.Engine.OfflineTrackingEngine` | ✅ |
-| `utils.coordinates`, `attribute_voting` | `PitchWise.Tracking.Utils.Coordinates`, `AttributeVoting` | ✅ |
-| YOLOv11 (ultralytics) | `YoloOnnxDetector` — ONNX Runtime + letterbox + NMS | ✅ (requires model export) |
-| `TrackletTeamClustering` (sklearn KMeans) | `TrackletTeamClustering` + own KMeans (k-means++) | ✅ |
-| `VotingTrackletJerseyNumber` | `VotingTrackletJerseyNumber` | ✅ |
-| StrongSORT (tracking, bpbreid_strong_sort) | separate MIT package [`StrongSort.Net`](https://github.com/arturbuszka/StrongSort.NET) (zero deps) + adapter `PitchWise.GameState.Track.StrongSortModule` | ✅ |
-| PRTReid (reid + role + team) | `PrtReidOnnx` — ONNX (export: `tools/export/export_prtreid.py`) | ✅ |
-| MMOCR (jersey numbers) | `MmocrOnnx` + `DbPostProcessor` — identical logic; weights: PP-OCRv4 (DB det + CTC rec) instead of DBNet-icdar15+SAR, because mmcv/mmdeploy requires py≤3.11/torch≤2.1 (export: `tools/export/export_ppocr.sh`; SAR route: `tools/export/export_mmocr.py`) | ✅ (substitute weights) |
-| NBJW calibration (keypoints → homography) | `NbjwCalibKeypoints` (ONNX) + `HeatmapDecoder` + `KeypointCompleter` + `FrameByFrameCalib` (RANSAC) + `NbjwCalib` (`bbox_pitch`) | ✅ |
-| Camera parameters (`get_cam_params` + `heuristic_voting`) | `FrameByFrameCalib.GetCamParams`/`HeuristicVoting` (multi-plane `calibrateCamera`, pan/tilt/roll) → `parameters` column | ✅ |
-| `MajorityVoteTracklet` (role + number per tracklet) | `PitchWise.Tracking.Wrappers.MajorityVoteTracklet` | ✅ |
-| `TrackletTeamSideLabeling` | pure-logic port | ✅ |
-| Visualization (ellipses, minimap, pitch lines) | `GameStateVisualizer` + `GameStateVideoRenderer` (mp4) + original `Radar.png` | ✅ |
-| SoccerNet-GSR dataset (`Labels-GameState.json`) | `PitchWise.GameState.Dataset.SoccerNetGameState` | ✅ |
-| Hydra (`soccernet.yaml`) | `configs/soccernet.yaml` + `PipelineConfig` (YamlDotNet) | ✅ |
-| GS-HOTA (evaluation) | `PitchWise.Tracking.Eval.Hota` (HOTA core from TrackEval) + `PitchWise.GameState.Evaluation.GsHota` (Gaussian kernel σ=2.5 + role/team/number gating) | ✅ |
+GS-HOTA on 10 SoccerNet-GSR `valid` sequences that were held out from tuning, scored with a .NET port
+of the official metric:
 
-The neural models (YOLO, PRTReid, OCR, calibration) run through **Microsoft.ML.OnnxRuntime**. Download
-them ready to use with `tools/models/download.sh`; see [docs/MODELS.md](docs/MODELS.md) for sources,
-licenses, GPU setup and how to regenerate them.
+| Variant | GS-HOTA |
+|---|---:|
+| Position, role, team and number | 31.5% |
+| Without jersey numbers | 47.2% |
+| Position and identity only | 57.7% |
+
+Jersey numbers cost the most: the OCR weights are a substitute for the original baseline's, because
+its export toolchain needs a much older Python and PyTorch. Measurements, diagnoses and experiments
+are in [docs/eval-baseline.md](docs/eval-baseline.md) (in Polish).
+
+## Quickstart
+
+Needs the .NET 10 SDK.
+
+```bash
+dotnet build PitchWise.slnx
+dotnet test PitchWise.slnx        # tests that need the dataset and models report as skipped
+
+tools/models/download.sh          # about 750 MB, into pretrained_models/
+
+# Run the pipeline on the first 100 frames of any video, on the CPU.
+dotnet run --project src/PitchWise.Cli -c Release -- -c configs/cpu.yaml track match.mp4 out.mp4 pretrained_models 100
+```
+
+CPU runs take seconds per frame. See [docs/MODELS.md](docs/MODELS.md) for GPU setup, the dataset,
+and where each model comes from.
 
 ## Structure
 
@@ -57,21 +63,19 @@ licenses, GPU setup and how to regenerate them.
 neither references the other, and the pipeline they assemble comes from the one `PipelineConfig` in
 `PitchWise.GameState`.
 
-StrongSORT tracking is provided by the separate MIT-licensed
-[StrongSort.Net](https://github.com/arturbuszka/StrongSort.NET) package, referenced via NuGet.
+How each part maps to the original Python code is in [docs/PORT_STATUS.md](docs/PORT_STATUS.md).
 
-## Build
+## Commands
 
 ```
-dotnet build PitchWise.slnx
-tools/models/download.sh   # about 750 MB, into pretrained_models/
-dotnet run --project src/PitchWise.Cli
-# render ground truth to mp4 (ellipses + minimap):
-dotnet run --project src/PitchWise.Cli -- render <SoccerNetGS_path> valid SNGS-021 out.mp4
 # full pipeline on any video (requires ONNX models in pretrained_models/):
 dotnet run --project src/PitchWise.Cli -- track match.mp4 out.mp4 [models_dir] [max_frames] [start_seconds]
+# pipeline + match statistics as JSON:
+dotnet run --project src/PitchWise.Cli -- stats match.mp4 out.json [models_dir] [max_frames] [start_seconds]
 # pipeline + GS-HOTA metric vs dataset ground truth:
 dotnet run --project src/PitchWise.Cli -- eval <SoccerNetGS_path> valid SNGS-021 [models_dir] [max_frames]
+# render ground truth to mp4 (ellipses + minimap):
+dotnet run --project src/PitchWise.Cli -- render <SoccerNetGS_path> valid SNGS-021 out.mp4
 ```
 
 Module parameters are configured in `configs/soccernet.yaml` (the Hydra equivalent; use the `-c other.yaml`
@@ -103,7 +107,7 @@ timeline whose markers seek to the frame, match statistics, and a debug/tuning t
 detections, a tracklet inspector, the job log, and sliders over every `EngineConfig` threshold that
 re-derive the timeline and stats in milliseconds.
 
-Jobs live in `%LOCALAPPDATA%\PitchWise\workspaces\`, one self-describing folder each (`manifest.json`
+Jobs live in `PitchWise/workspaces` under the local application data folder (`%LOCALAPPDATA%` on Windows, `~/.local/share` on Linux), one self-describing folder each (`manifest.json`
 plus artifacts), so discovery is a directory scan and a job survives being copied elsewhere.
 
 Two things worth knowing:
