@@ -1,5 +1,8 @@
 """Export the mmocr text detector (DBNet) and recognizer (SAR) to ONNX for MmocrOnnx.
 
+Not used for the published models: those are PP-OCRv4, see export_ppocr.sh. This is the route
+to the original baseline's weights; mmdeploy needs Python <= 3.11 and torch <= 2.1.
+
 The baseline uses det='dbnet_resnet18_fpnc_1200e_icdar2015' and rec='SAR'.
 SAR has an attention decoder, which is easiest to export via mmdeploy:
 

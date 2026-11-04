@@ -1,0 +1,11 @@
+# Export environment for run_exports.*, tested on Python 3.10.
+# Only needed to regenerate the models; tools/models/download.* fetches them ready to use.
+torch==2.14.1
+torchvision==0.29.1
+onnx==1.23.2
+onnxruntime==1.23.2
+onnxscript==0.7.2
+onnxslim==0.1.97
+ultralytics==8.4.174
+matplotlib<3.9
+prtreid @ git+https://github.com/VlSomers/prtreid.git

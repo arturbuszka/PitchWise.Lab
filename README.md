@@ -30,7 +30,7 @@ Licensed under **GPL-3.0** — see [LICENSE](LICENSE) and [NOTICE](NOTICE).
 | `VotingTrackletJerseyNumber` | `VotingTrackletJerseyNumber` | ✅ |
 | StrongSORT (tracking, bpbreid_strong_sort) | separate MIT package [`StrongSort.Net`](https://github.com/arturbuszka/StrongSort.NET) (zero deps) + adapter `PitchWise.GameState.Track.StrongSortModule` | ✅ |
 | PRTReid (reid + role + team) | `PrtReidOnnx` — ONNX (export: `tools/export/export_prtreid.py`) | ✅ |
-| MMOCR (jersey numbers) | `MmocrOnnx` + `DbPostProcessor` — identical logic; weights: PP-OCRv4 (DB det + CTC rec) instead of DBNet-icdar15+SAR, because mmcv/mmdeploy requires py≤3.11/torch≤2.1 (SAR export: `tools/export/export_mmocr.py`) | ✅ (substitute weights) |
+| MMOCR (jersey numbers) | `MmocrOnnx` + `DbPostProcessor` — identical logic; weights: PP-OCRv4 (DB det + CTC rec) instead of DBNet-icdar15+SAR, because mmcv/mmdeploy requires py≤3.11/torch≤2.1 (export: `tools/export/export_ppocr.sh`; SAR route: `tools/export/export_mmocr.py`) | ✅ (substitute weights) |
 | NBJW calibration (keypoints → homography) | `NbjwCalibKeypoints` (ONNX) + `HeatmapDecoder` + `KeypointCompleter` + `FrameByFrameCalib` (RANSAC) + `NbjwCalib` (`bbox_pitch`) | ✅ |
 | Camera parameters (`get_cam_params` + `heuristic_voting`) | `FrameByFrameCalib.GetCamParams`/`HeuristicVoting` (multi-plane `calibrateCamera`, pan/tilt/roll) → `parameters` column | ✅ |
 | `MajorityVoteTracklet` (role + number per tracklet) | `PitchWise.Tracking.Wrappers.MajorityVoteTracklet` | ✅ |
@@ -40,8 +40,9 @@ Licensed under **GPL-3.0** — see [LICENSE](LICENSE) and [NOTICE](NOTICE).
 | Hydra (`soccernet.yaml`) | `configs/soccernet.yaml` + `PipelineConfig` (YamlDotNet) | ✅ |
 | GS-HOTA (evaluation) | `PitchWise.Tracking.Eval.Hota` (HOTA core from TrackEval) + `PitchWise.GameState.Evaluation.GsHota` (Gaussian kernel σ=2.5 + role/team/number gating) | ✅ |
 
-The neural models (YOLO, PRTReid, MMOCR, calibration) run through **Microsoft.ML.OnnxRuntime** — the
-PyTorch weights must be exported to ONNX once (scripts under `tools/export`).
+The neural models (YOLO, PRTReid, OCR, calibration) run through **Microsoft.ML.OnnxRuntime**. Download
+them ready to use with `tools/models/download.sh`; see [docs/MODELS.md](docs/MODELS.md) for sources,
+licenses, GPU setup and how to regenerate them.
 
 ## Structure
 
@@ -63,6 +64,7 @@ StrongSORT tracking is provided by the separate MIT-licensed
 
 ```
 dotnet build PitchWise.slnx
+tools/models/download.sh   # about 750 MB, into pretrained_models/
 dotnet run --project src/PitchWise.Cli
 # render ground truth to mp4 (ellipses + minimap):
 dotnet run --project src/PitchWise.Cli -- render <SoccerNetGS_path> valid SNGS-021 out.mp4
@@ -77,7 +79,7 @@ flag to switch). Modules with `enabled: auto` turn on when their ONNX models are
 
 `track` assembles the pipeline from the modules whose models are available: `yolo11m.onnx` (required) →
 `prtreid-soccernet-baseline.onnx` (teams / roles) → StrongSORT → `nbjw_kp/lines.onnx`
-(homography + minimap) → `mmocr_det/rec.onnx` (numbers). Export: `tools/export/*.py`.
+(homography + minimap) → `mmocr_det/rec.onnx` (numbers).
 
 ## Desktop app
 
