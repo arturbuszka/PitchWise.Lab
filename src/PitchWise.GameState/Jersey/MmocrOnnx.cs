@@ -27,6 +27,7 @@ public sealed class MmocrOnnx : DetectionLevelModule, IDisposable
 {
     private readonly InferenceSession _det;
     private readonly InferenceSession _rec;
+    private readonly bool _detOnCpu;
     private readonly string[] _charset;
     private readonly RecDecodeMode _decodeMode;
     private readonly int _recHeight;
@@ -48,10 +49,12 @@ public sealed class MmocrOnnx : DetectionLevelModule, IDisposable
     /// <param name="charsetPath">Text file with one recognizer dictionary character per line.</param>
     public MmocrOnnx(string detModelPath, string recModelPath, string charsetPath,
         int batchSize = 8, RecDecodeMode decodeMode = RecDecodeMode.Ctc,
-        int recHeight = 48, int recWidth = 320)
+        int recHeight = 48, int recWidth = 320, bool detOnCpu = false)
         : base(batchSize)
     {
-        _det = OnnxSessions.Create(detModelPath);
+        // CUDA only: on other providers the detector stays on the shared provider
+        _detOnCpu = detOnCpu && OnnxSessions.Provider == OnnxProvider.Cuda;
+        _det = _detOnCpu ? new InferenceSession(detModelPath) : OnnxSessions.Create(detModelPath);
         _rec = OnnxSessions.Create(recModelPath);
         _charset = File.ReadAllLines(charsetPath).ToArray();
         _decodeMode = decodeMode;
@@ -112,7 +115,8 @@ public sealed class MmocrOnnx : DetectionLevelModule, IDisposable
         using var resized = crop.Resize(new Size(w, h));
 
         var input = ToNormalizedTensor(resized, ImageNetMean, ImageNetStd);
-        using var outputs = OnnxSessions.Run(_det, new[] { NamedOnnxValue.CreateFromTensor(_det.InputMetadata.Keys.First(), input) });
+        var detInputs = new[] { NamedOnnxValue.CreateFromTensor(_det.InputMetadata.Keys.First(), input) };
+        using var outputs = _detOnCpu ? _det.Run(detInputs) : OnnxSessions.Run(_det, detInputs);
         var probMap = outputs.First().AsTensor<float>();
 
         // output can be [1, 1, H, W] or [1, H, W]

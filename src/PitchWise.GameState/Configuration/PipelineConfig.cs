@@ -135,6 +135,10 @@ public sealed class PipelineConfig
         public string DetModel { get; set; } = "mmocr_det.onnx";
         public string RecModel { get; set; } = "mmocr_rec.onnx";
         public string Charset { get; set; } = "mmocr_charset.txt";
+        /// <summary>Run the text detector on the CPU when the provider is CUDA. Its single depthwise 3x3
+        /// conv takes ~180 ms on the GPU with every cuDNN algorithm (the rest of the net ~30 ms), the CPU
+        /// does the whole net in ~45 ms; readings are identical.</summary>
+        public bool DetOnCpu { get; set; } = true;
     }
 
     /// <summary>Role correction by jersey colour (<see cref="TrackletRoleCorrection"/>); off unless enabled.</summary>
@@ -292,7 +296,7 @@ public sealed class PipelineConfig
             modules.Add(new TrackletMerging(TrackletMerging.ToOptions(), fps, log));
         }
         if (hasOcr)
-            modules.Add(new MmocrOnnx(Model(Jersey.DetModel), Model(Jersey.RecModel), Model(Jersey.Charset)));
+            modules.Add(new MmocrOnnx(Model(Jersey.DetModel), Model(Jersey.RecModel), Model(Jersey.Charset), detOnCpu: Jersey.DetOnCpu));
 
         var voteAttributes = new List<string>();
         if (hasOcr) voteAttributes.Add("jersey_number");

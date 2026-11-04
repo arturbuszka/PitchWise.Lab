@@ -842,3 +842,35 @@ W 079 OCR czyta tylko 6% detekcji, z czego 26% poprawnie.
 **Wniosek:** największa dźwignia to sam OCR: 16% odczytów i 59% trafności, a ok. 9 pkt jest poza zasięgiem jakiegokolwiek głosowania.
 Tanie poprawki głosowania (fragmenty cyfr, wstrzymanie się przy słabych dowodach, roster jako lista dozwolonych numerów) mają razem zapas do ok. 8.5 pkt.
 Uwaga: wszystko to na stałej piątce. Na sekwencjach kontrolnych wariantu pełnego nie ma, bo nie było biegu z OCR.
+
+### Przyspieszenie OCR i wariant pełny na sekwencjach kontrolnych (2026-10-13)
+
+**Przyczyna wolnego OCR.** Nie kształty wejść ani dostrajanie cuDNN. Profil ORT detektora (DBNet, MobileNetV3, 4.7 MB): jedna konwolucja
+(depthwise 3×3, `group=96`, `Conv.9`) zajmuje ok. 180 z 210 ms na detekcję; GPU jest wtedy prawie bezczynny (ok. 5%). Rozpoznawanie to ok. 3% czasu.
+Powtórzony kształt nie jest szybszy (213 vs 223 ms). Na GPU bez efektu: `cudnn_conv_algo_search` HEURISTIC (211 ms), DEFAULT (ok. 540 ms),
+`cudnn_conv_use_max_workspace=1`, strategia i kurczenie areny; `prefer_nhwc` ok. 2.5 s.
+**Rozwiązanie:** detektor na CPU (ok. 45 ms na detekcję), opcja `jersey.det_on_cpu` (w kodzie domyślnie `true`, tylko przy providerze CUDA; yaml nietknięty).
+Nie próbowano naprawy węzła na GPU (przepisanie grafu, TF32/FP16).
+
+**Odczyty bez zmian.** Harness (kopia logiki OCR) odtworzył odczyty z cache 878/878 (100 klatek 022), CPU = GPU, ta sama pewność.
+Pełne 022 przez pipeline (`RERUN=StrongSortModule,TorsoColor,MmocrOnnx`): zrzut bajt w bajt identyczny z `20261010-154834`. OCR: 2.7 → 0.71 s/klatkę (531 s na sekwencję).
+
+**Wariant pełny na 10 sekwencjach kontrolnych** (obecny domyślny config, run `20261013-232134`, własny cache w `<run>/cache` — z OCR):
+
+| sekwencja | pełny | bez nr | pozycja |
+|---|--:|--:|--:|
+| 023 | 33.9 | 40.9 | 40.8 |
+| 031 | 40.0 | 51.0 | 53.9 |
+| 034 | 48.3 | 55.0 | 55.5 |
+| 041 | 30.6 | 71.4 | 77.1 |
+| 044 | 21.5 | 43.8 | 54.3 |
+| 048 | 15.0 | 39.3 | 54.4 |
+| 050 | 27.1 | 38.1 | 42.3 |
+| 056 | 45.3 | 57.7 | 80.8 |
+| 082 | 38.1 | 58.7 | 60.2 |
+| 092 | 15.4 | 19.4 | 61.9 |
+| **łącznie** | **31.5** | **47.2** | **57.7** |
+
+- Bez numerów i sama pozycja zgadzają się z poprzednim biegiem bez OCR (47.2 / 57.7).
+- Numery kosztują na kontrolnych ok. 15.7 pkt (piątka: ok. 18.4 przy 41.0 vs 59.4). Najgorzej 041, 044, 048 (mecz 3), gdzie DetA pełnego to 5–10%: prawie żaden zawodnik nie ma poprawnego numeru.
+- Od teraz eksperymenty z numerami można puszczać z cache `20261013-232134` na obu zbiorach.
