@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Microsoft.ML.OnnxRuntime;
 
@@ -71,6 +72,7 @@ public static class OnnxSessions
                 else
                     cuda.AppendExecutionProvider_CUDA(DeviceId);
                 var session = new InferenceSession(modelPath, cuda);
+                _cudaSessions.Add(session, new object());
                 Log?.LogInformation("ONNX {Model}: running on CUDA (device {Device})", name, DeviceId);
                 return session;
             }
@@ -99,12 +101,16 @@ public static class OnnxSessions
 
     private static RunOptions? _shrinkArena;
 
+    // Provider says what was asked for, not where a session landed: one that fell back to CPU has no
+    // GPU arena, and asking ORT to shrink it throws.
+    private static readonly ConditionalWeakTable<InferenceSession, object> _cudaSessions = new();
+
     /// <summary>Runs the session; in <see cref="LowVram"/> CUDA mode releases the session's unused
     /// GPU arena memory afterwards.</summary>
     public static IDisposableReadOnlyCollection<DisposableNamedOnnxValue> Run(
         InferenceSession session, IReadOnlyCollection<NamedOnnxValue> inputs)
     {
-        if (!LowVram || Provider != OnnxProvider.Cuda)
+        if (!LowVram || !_cudaSessions.TryGetValue(session, out _))
             return session.Run(inputs);
         if (_shrinkArena is null)
         {
