@@ -13,8 +13,9 @@ It is a .NET port of the SoccerNet
 neural networks run through ONNX Runtime with no Python at runtime, and the tracker is my own
 [StrongSort.Net](https://github.com/arturbuszka/StrongSort.NET) package.
 
-This is the vision half of PitchWise. The backend, which handles uploads, job queues, highlight
-reels and HLS delivery, is in [PitchWise.Platform](https://github.com/arturbuszka/PitchWise.Platform).
+[PitchWise.Platform](https://github.com/arturbuszka/PitchWise.Platform) is the related backend, which
+handles uploads, job queues, highlight reels and HLS delivery. It currently runs its own faster,
+simpler vision pipeline, and running this one as an accurate analysis mode there is in progress.
 
 Licensed under **GPL-3.0** — see [LICENSE](LICENSE) and [NOTICE](NOTICE).
 
