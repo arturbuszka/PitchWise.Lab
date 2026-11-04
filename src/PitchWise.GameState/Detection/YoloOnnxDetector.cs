@@ -64,7 +64,7 @@ public sealed class YoloOnnxDetector : ImageLevelModule, IDisposable
         foreach (var sample in batch.Cast<PreprocessedImage>())
         {
             var inputName = _session.InputMetadata.Keys.First();
-            using var results = _session.Run(new[] { NamedOnnxValue.CreateFromTensor(inputName, sample.Tensor) });
+            using var results = OnnxSessions.Run(_session, new[] { NamedOnnxValue.CreateFromTensor(inputName, sample.Tensor) });
             var output = results.First().AsTensor<float>();
 
             foreach (var (bbox, conf) in DecodeAndNms(output, sample.Scale, sample.PadX, sample.PadY))

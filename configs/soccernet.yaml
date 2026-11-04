@@ -3,8 +3,9 @@
 models_dir: pretrained_models
 
 onnx:
-  provider: dml   # cpu | dml (DirectML — any DX12 GPU on Windows, no install needed)
-  device_id: 1    # hybrid-graphics laptops: 0 is often the integrated GPU, 1 the discrete one
+  provider: cuda   # cpu | dml (DirectML — any DX12 GPU on Windows, no install needed)
+  device_id: 0    # CUDA: index among NVIDIA GPUs only (0 = first). DirectML on hybrid laptops: 0 is often the integrated GPU, 1 the discrete one
+  low_vram: true  # CUDA on <= 6 GB GPUs: release arena memory between runs (avoids OOM); set false on bigger GPUs
 
 bbox_detector:
   model: yolo11m.onnx
@@ -24,6 +25,21 @@ track:  # StrongSORT hyperparameters
   max_age: 300
   n_init: 0
   min_confidence: 0.0
+  max_kalman_predictions_without_update: 7
+  kalman_noise: bpbreid          # bpbreid (tracklab, as sn-gamestate) | strongsort (original paper; with gating_uses_confidence: true
+  gating_uses_confidence: false  #   and max_kalman_predictions_without_update: 8 = the tracker of the 2026-10-08 baseline)
+  camera_motion: none            # none (sn-gamestate) | ecc (tracklab ecc.py) | flow (sparse optical flow): moves tracks with the camera
+
+tracklet_merging:  # offline: joins a tracklet that ends to one starting later (same person after leaving the frame / occlusion)
+  enabled: true
+  max_gap_seconds: 10           # end -> start
+  max_distance_meters: 3        # pitch distance allowed: max_distance_meters + max_speed * gap
+  max_speed: 8                  # m/s
+  max_appearance_distance: 0.3  # cosine, mean ReID embeddings of the two tracklets
+  distance_weight: 0.3          # link cost = appearance + distance_weight * distance/allowed + gap_weight * gap/max_gap
+  gap_weight: 0.1
+  no_link_cost: 0.1             # links costing more are not made
+  min_team_detections: 10       # shorter tracklets have no reliable jersey colour: no same-team constraint
 
 pitch:
   enabled: auto
@@ -39,3 +55,16 @@ jersey:
   det_model: mmocr_det.onnx
   rec_model: mmocr_rec.onnx
   charset: mmocr_charset.txt
+
+role_correction:  # offline: fixes tracklet roles from PRTReid with jersey colour (a whole team voted "referee", goalkeeper voted "player")
+  enabled: true
+  max_referees_per_frame: 3       # more on average and the "referee" group is a team
+  max_goalkeepers_per_frame: 2    # likewise for "goalkeeper"
+  lightness_weight: 0.25          # weight of Lab L in colour distances (shadows change L, not a/b)
+  team_color_radius: 20           # crowded group: tracklets this close to a team colour are players
+  goalkeeper_color_distance: 15   # goalkeeper: farther than this from both team colours ...
+  goalkeeper_min_abs_x: 38        # ... and mean pitch |x| beyond this (m)
+  min_color_detections: 10        # shorter tracklets keep their role
+
+team:
+  feature: color   # color (jersey colour, TorsoColor) | embedding (mean ReID embedding, as the Python sn-gamestate)

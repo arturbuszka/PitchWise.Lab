@@ -72,7 +72,7 @@ public sealed class NbjwCalibKeypoints : ImageLevelModule, IDisposable
     private static Tensor<float> Run(InferenceSession session, DenseTensor<float> input)
     {
         var inputName = session.InputMetadata.Keys.First();
-        using var results = session.Run(new[] { NamedOnnxValue.CreateFromTensor(inputName, input) });
+        using var results = OnnxSessions.Run(session, new[] { NamedOnnxValue.CreateFromTensor(inputName, input) });
         // clone out of the disposed result buffer
         return results.First().AsTensor<float>().ToDenseTensor();
     }

@@ -79,7 +79,7 @@ public sealed class AnalysisJobRunner : IAnalysisJobRunner
 
             var config = PipelineConfig.Load(request.ConfigPath);
             config.ModelsDir = ResolveModelsDir(request, config, log);
-            var pipeline = config.BuildPipeline(imWidth, imHeight, log);
+            var pipeline = config.BuildPipeline(imWidth, imHeight, log, fps);
 
             manifest = manifest with
             {

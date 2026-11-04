@@ -53,6 +53,10 @@ public static class ExternalVideo
             if (maxFrames > 0 && kept >= maxFrames) break;
         }
 
+        if (kept == 0)
+            throw new InvalidOperationException(
+                $"Opened {videoPath} but decoded no frames — the bundled OpenCV probably cannot decode its codec (re-encode to H.264)");
+
         video["nframes"] = kept;
         return new TrackingSet { VideoMetadatas = videoMetadatas, ImageMetadatas = imageMetadatas };
     }

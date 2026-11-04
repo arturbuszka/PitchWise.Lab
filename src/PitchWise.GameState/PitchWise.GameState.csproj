@@ -3,12 +3,13 @@
   <ItemGroup>
     <ProjectReference Include="..\PitchWise.Tracking\PitchWise.Tracking.csproj" />
     <ProjectReference Include="..\PitchWise.Engine\PitchWise.Engine.csproj" />
-    <PackageReference Include="StrongSort.Net" Version="1.0.0" />
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="StrongSort.Net" Version="2.0.0" />
     <PackageReference Include="Microsoft.AI.DirectML" Version="1.15.4" />
-    <PackageReference Include="Microsoft.ML.OnnxRuntime.DirectML" Version="1.24.4" />
+    <PackageReference Include="Microsoft.ML.OnnxRuntime.DirectML" Version="1.24.4" Condition="!$([MSBuild]::IsOSPlatform('Linux'))" />
+    <PackageReference Include="Microsoft.ML.OnnxRuntime.Gpu.Linux" Version="1.24.4" Condition="$([MSBuild]::IsOSPlatform('Linux'))" />
     <!-- PipelineConfig lives here so every host (CLI, desktop, a future streaming
          backend) assembles the pipeline from the same declarative config. -->
     <PackageReference Include="YamlDotNet" Version="18.1.0" />

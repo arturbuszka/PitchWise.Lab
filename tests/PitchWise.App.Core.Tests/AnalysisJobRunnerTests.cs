@@ -9,24 +9,25 @@ namespace PitchWise.App.Core.Tests;
 /// with no UI at all.
 /// </summary>
 /// <remarks>
-/// These require the repo's dataset and ONNX models, both of which are present in this checkout,
-/// so their absence is asserted rather than skipped past: a test that quietly passes when it
-/// tested nothing is worse than no test. Six frames with the OCR-free CPU config keeps the whole
-/// thing to a few seconds.
+/// These need the SoccerNet frames and ONNX models, which are not in git (see docs/MODELS.md), so
+/// without them they are reported as skipped rather than failed or passed. Each runs six frames
+/// with the OCR-free CPU config, about a minute per test on a laptop CPU.
 /// </remarks>
 public class AnalysisJobRunnerTests : IDisposable
 {
-    private const string FramesDir = @"data\SoccerNetGS\valid\SNGS-021\img1";
+    private static readonly string FramesDir = Path.Combine("data", "SoccerNetGS", "valid", "SNGS-021", "img1");
     private const string ModelsDir = "pretrained_models";
-    private const string ConfigPath = @"configs\cpu-noocr.yaml";
+    private static readonly string ConfigPath = Path.Combine("configs", "cpu-noocr.yaml");
 
     private readonly string _root = Path.Combine(Path.GetTempPath(), $"runner-test-{Guid.NewGuid():N}");
-    private readonly string? _repo = FindRepoRoot();
+    private readonly string? _repo = RepoRoot;
 
     public void Dispose()
     {
         if (Directory.Exists(_root)) Directory.Delete(_root, recursive: true);
     }
+
+    private static readonly string? RepoRoot = FindRepoRoot();
 
     /// <summary>Walks up from the test binary to the repo, which holds the data and models.</summary>
     private static string? FindRepoRoot()
@@ -48,20 +49,23 @@ public class AnalysisJobRunnerTests : IDisposable
         return new AnalysisJobRunner(store).RunAsync(paths, request, progress, ct);
     }
 
-    /// <summary>Fails loudly rather than skipping: these assets are part of the checkout.</summary>
-    private void RequireAssets()
+    /// <summary>Skips the test, naming what is missing, unless the frames and detector model are present.</summary>
+    private sealed class RequiresAssetsFactAttribute : FactAttribute
     {
-        Assert.True(_repo is not null, "could not locate the repo root from the test binary");
-        Assert.True(Directory.Exists(Path.Combine(_repo!, FramesDir)), $"missing frames: {FramesDir}");
-        Assert.True(File.Exists(Path.Combine(_repo!, ModelsDir, "yolo11m.onnx")),
-            $"missing detector model in {ModelsDir}");
+        public RequiresAssetsFactAttribute()
+        {
+            if (RepoRoot is null)
+                Skip = "could not locate the repo root from the test binary";
+            else if (!Directory.Exists(Path.Combine(RepoRoot, FramesDir)))
+                Skip = $"missing frames: {FramesDir}";
+            else if (!File.Exists(Path.Combine(RepoRoot, ModelsDir, "yolo11m.onnx")))
+                Skip = $"missing detector model in {ModelsDir}";
+        }
     }
 
-    [Fact]
+    [RequiresAssetsFact]
     public async Task RunAsync_ProducesEveryArtifactAJobFolderPromises()
     {
-        RequireAssets();
-
         var store = new WorkspaceStore(_root);
         var updates = new List<AnalysisProgress>();
 
@@ -102,11 +106,9 @@ public class AnalysisJobRunnerTests : IDisposable
         Assert.Equal(result.JobId, store.DiscoverAll().Single().Manifest.JobId);
     }
 
-    [Fact]
+    [RequiresAssetsFact]
     public async Task RunAsync_WritesResultsThatReopenWithTheRadarAndPitchOverlayIntact()
     {
-        RequireAssets();
-
         var store = new WorkspaceStore(_root);
         var result = await Run(store, new AnalysisRequest
         {
@@ -135,11 +137,9 @@ public class AnalysisJobRunnerTests : IDisposable
         Assert.Equal(6, stats.FramesProcessed);
     }
 
-    [Fact]
+    [RequiresAssetsFact]
     public async Task RunAsync_ReportsProgressThatEndsWhereItShould()
     {
-        RequireAssets();
-
         var updates = new List<AnalysisProgress>();
         var store = new WorkspaceStore(_root);
         await Run(store, new AnalysisRequest
@@ -160,11 +160,9 @@ public class AnalysisJobRunnerTests : IDisposable
         Assert.Equal(fractions.OrderBy(f => f), fractions);
     }
 
-    [Fact]
+    [RequiresAssetsFact]
     public async Task RunAsync_CancellationLeavesACancelledJobRatherThanAHalfWrittenOne()
     {
-        RequireAssets();
-
         var store = new WorkspaceStore(_root);
         using var cts = new CancellationTokenSource();
 
@@ -188,11 +186,9 @@ public class AnalysisJobRunnerTests : IDisposable
         Assert.False(File.Exists(job.Paths.Stats), "a cancelled run must not leave stats behind");
     }
 
-    [Fact]
+    [RequiresAssetsFact]
     public async Task RunAsync_FindsTheModelsFromAConfigWhateverTheWorkingDirectoryIs()
     {
-        RequireAssets();
-
         // The app's working directory is its own bin folder, not the repo root the CLI is run
         // from, so `models_dir: pretrained_models` from the config would otherwise resolve
         // against bin\Debug and the run would die with a missing-model error.

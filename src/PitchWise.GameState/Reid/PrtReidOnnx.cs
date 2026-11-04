@@ -64,7 +64,7 @@ public sealed class PrtReidOnnx : DetectionLevelModule, IDisposable
             samples[n].Tensor.CopyTo(input.Buffer.Span.Slice(n * samples[n].Tensor.Length));
 
         var inputName = _session.InputMetadata.Keys.First();
-        using var results = _session.Run(new[] { NamedOnnxValue.CreateFromTensor(inputName, input) });
+        using var results = OnnxSessions.Run(_session, new[] { NamedOnnxValue.CreateFromTensor(inputName, input) });
         var outputs = results.ToDictionary(r => r.Name, r => r.AsTensor<float>());
         var embeddings = outputs["embeddings"];           // [N, D]
         var visibility = outputs["visibility_scores"];    // [N, K]

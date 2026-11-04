@@ -1,0 +1,8 @@
+# SoccerNet-GSR valid: 5 sekwencji do pomiaru baseline wizji (tools/eval/run_eval.*).
+# Wybrane raz: sorted(random.Random(42).sample(sorted(58 sekwencji valid), 5)), Python 3.
+# Nie zmieniaj listy, żeby kolejne pomiary były porównywalne.
+SNGS-022
+SNGS-028
+SNGS-038
+SNGS-079
+SNGS-086
