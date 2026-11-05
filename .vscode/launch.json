@@ -1,0 +1,36 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "CLI: analyze 5 frames (CPU)",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "prepare CLI debug",
+      "program": "${workspaceFolder}/src/PitchWise.Cli/bin/Debug/net10.0/PitchWise.Cli.dll",
+      "args": ["-c", "configs/cpu.yaml", "analyze", "data/debug/testsrc2.mp4", "data/debug/out", "pretrained_models", "5"],
+      "cwd": "${workspaceFolder}",
+      "console": "internalConsole"
+    },
+    {
+      "name": "CLI: analyze 5 frames (GPU)",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "prepare CLI debug",
+      "program": "${workspaceFolder}/src/PitchWise.Cli/bin/Debug/net10.0/PitchWise.Cli.dll",
+      "args": ["analyze", "data/debug/testsrc2.mp4", "data/debug/out", "pretrained_models", "5"],
+      "cwd": "${workspaceFolder}",
+      "envFile": "${workspaceFolder}/.vscode/cuda.env",
+      "console": "internalConsole"
+    },
+    {
+      "name": "Desktop app (GPU)",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build",
+      "program": "${workspaceFolder}/src/PitchWise.App/bin/Debug/net10.0/PitchWise.App.dll",
+      "cwd": "${workspaceFolder}",
+      "envFile": "${workspaceFolder}/.vscode/cuda.env",
+      "console": "internalConsole"
+    }
+  ]
+}

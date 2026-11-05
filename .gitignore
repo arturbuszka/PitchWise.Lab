@@ -5,7 +5,6 @@ pretrained_models/
 tools/clips/
 SoccerNet_labels/
 SoccerNet_raw_HQ/
-.vscode/
 *.onnx
 .vs/
 data/
