@@ -227,6 +227,21 @@ public class PlaybackTests : IDisposable
     }
 
     /// <summary>Paces nothing, so the loop runs as fast as it can decode.</summary>
+    [Fact]
+    public void PlaybackLoop_DisposingWhileIdleDoesNotCrashTheProcess()
+    {
+        var imagePreds = CreateFrames(1);
+        using var source = new FrameSequenceSource(imagePreds, fps: 25);
+        using var overlay = new OverlayRenderer(new DataFrame());
+
+        var loop = new PlaybackLoop(source, overlay, new InstantClock(), _ => { });
+        // gives the thread time to start waiting, which is where cancelling used to throw
+        Thread.Sleep(200);
+
+        // an exception on the loop's own thread would end the test process, not just fail this test
+        loop.Dispose();
+    }
+
     private sealed class InstantClock : IFrameClock
     {
         public void WaitNextFrame(double fps, double rate, CancellationToken ct) { }

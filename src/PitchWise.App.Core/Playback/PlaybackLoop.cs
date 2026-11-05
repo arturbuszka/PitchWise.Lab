@@ -113,32 +113,39 @@ public sealed class PlaybackLoop : IDisposable
     private void Run()
     {
         var ct = _cts.Token;
-        while (!ct.IsCancellationRequested)
+        try
         {
-            if (!_playing && !_seekPending)
+            while (!ct.IsCancellationRequested)
             {
-                _wake.Wait(ct);   // idle: nothing to draw and nothing burning CPU
-                continue;
-            }
-
-            int index;
-            if (_seekPending)
-            {
-                _seekPending = false;
-                index = _requestedIndex;
-            }
-            else
-            {
-                index = _currentIndex + 1;
-                if (index >= _source.FrameCount)
+                if (!_playing && !_seekPending)
                 {
-                    _playing = false;   // stop at the end rather than wrapping
+                    _wake.Wait(ct);   // idle: nothing to draw and nothing burning CPU
                     continue;
                 }
-            }
 
-            if (RenderOne(index) && _playing)
-                _clock.WaitNextFrame(_source.Fps, _rate, ct);
+                int index;
+                if (_seekPending)
+                {
+                    _seekPending = false;
+                    index = _requestedIndex;
+                }
+                else
+                {
+                    index = _currentIndex + 1;
+                    if (index >= _source.FrameCount)
+                    {
+                        _playing = false;   // stop at the end rather than wrapping
+                        continue;
+                    }
+                }
+
+                if (RenderOne(index) && _playing)
+                    _clock.WaitNextFrame(_source.Fps, _rate, ct);
+            }
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            // Dispose was called. Nothing above this thread could catch it, so it would end the process.
         }
     }
 

@@ -42,7 +42,7 @@ The default config asks for CUDA and falls back to CPU, with a warning, when it 
 To stay on CPU without the warnings, pass `-c configs/cpu.yaml`.
 
 ONNX Runtime needs CUDA 12 and cuDNN 9. If they are not installed system-wide, the NVIDIA wheels are
-enough:
+enough. They take 2.7 GB:
 
 ```bash
 python3 -m venv ~/cuda12-libs
@@ -51,6 +51,7 @@ python3 -m venv ~/cuda12-libs
 export LD_LIBRARY_PATH="$(ls -d ~/cuda12-libs/lib/python3*/site-packages/nvidia/*/lib | paste -sd:)"
 ```
 
+Tested from a clean venv with Python 3.14 and cuDNN 9.28, on a GTX 1660 Ti (6 GB).
 `tools/eval/run_eval.sh` sets this path itself. On GPUs with more than 6 GB, set
 `onnx.low_vram: false` in the config.
 

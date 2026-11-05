@@ -1,0 +1,40 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "build",
+      "type": "process",
+      "command": "dotnet",
+      "args": ["build", "PitchWise.slnx"],
+      "group": { "kind": "build", "isDefault": true },
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "test",
+      "type": "process",
+      "command": "dotnet",
+      "args": ["test", "PitchWise.slnx"],
+      "group": { "kind": "test", "isDefault": true },
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "create test video",
+      "type": "shell",
+      "command": "mkdir -p data/debug && test -f data/debug/testsrc2.mp4 || ffmpeg -nostdin -loglevel error -f lavfi -i testsrc2=size=1920x1080:rate=25:d=2 -c:v libx264 -pix_fmt yuv420p data/debug/testsrc2.mp4",
+      "problemMatcher": []
+    },
+    {
+      "label": "prepare CLI debug",
+      "dependsOrder": "sequence",
+      "dependsOn": ["create test video", "build"],
+      "problemMatcher": []
+    },
+    {
+      "label": "write CUDA env file",
+      "detail": "Run once after installing the CUDA libraries. The GPU configurations read this file.",
+      "type": "shell",
+      "command": "echo \"LD_LIBRARY_PATH=$(ls -d \"$HOME\"/cuda12-libs/lib/python3*/site-packages/nvidia/*/lib | paste -sd:)\" > .vscode/cuda.env",
+      "problemMatcher": []
+    }
+  ]
+}
