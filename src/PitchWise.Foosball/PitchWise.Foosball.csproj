@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <!-- Table model and foosball rules on top of the engine. Like the engine it never sees
+       pixels, so no OpenCV or ONNX here: those live in PitchWise.Foosball.Vision. -->
+  <ItemGroup>
+    <ProjectReference Include="..\PitchWise.Engine\PitchWise.Engine.csproj" />
+  </ItemGroup>
+
+</Project>
