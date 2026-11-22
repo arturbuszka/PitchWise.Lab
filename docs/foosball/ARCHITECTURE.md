@@ -160,7 +160,7 @@ Do tego czasu dane zbieramy na stole testowym.
   - Cel: zobaczyć detekcję na całym nagraniu.
   - Zakres: `foosball detect wejście.mp4 wyjście.mp4` rysuje boksy i wypisuje % klatek z piłką.
   - Gotowe, gdy: wideo z boksami i liczba na wyjściu.
-- [ ] **3.4 Kalibracja stołu**
+- [x] **3.4 Kalibracja stołu**
   - Cel: przejście z pikseli na metry.
   - Zakres: 4 narożniki boiska → homografia, zapis do pliku kalibracji. Narożniki podawane ręcznie (z pliku/argumentu).
   - Gotowe, gdy: test: narożniki obrazu mapują się na narożniki modelu stołu z błędem < 2 mm.

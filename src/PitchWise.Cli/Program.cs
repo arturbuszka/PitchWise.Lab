@@ -59,6 +59,8 @@ var rerun = TakeOption("--rerun")?.Split(',', StringSplitOptions.RemoveEmptyEntr
 var foosballDetector = TakeOption("--detector") ?? FoosballCommands.DefaultDetectorConfig;
 var foosballStride = int.Parse(TakeOption("--stride") ?? "1");
 var foosballMaxFrames = int.Parse(TakeOption("--max-frames") ?? "0");
+// foosball calibrate: table model config
+var foosballTable = TakeOption("--table") ?? FoosballCommands.DefaultTableConfig;
 configPath ??= File.Exists("configs/soccernet.yaml") ? "configs/soccernet.yaml" : null;
 var config = PipelineConfig.Load(configPath);
 if (configPath is not null)
@@ -84,6 +86,8 @@ return args switch
         rest.Length > 1 ? int.Parse(rest[1]) : 0),
     ["foosball", "detect", var input, var output] =>
         FoosballCommands.Detect(input, output, foosballDetector, foosballStride, foosballMaxFrames),
+    ["foosball", "calibrate", var video, var calib, var c1, var c2, var c3, var c4] =>
+        FoosballCommands.Calibrate(video, calib, foosballTable, [c1, c2, c3, c4]),
     ["eval-combine", var output, .. var inputs] when inputs.Length > 0 => EvalCombine(output, inputs),
     _ => Usage(),
 };
@@ -104,6 +108,8 @@ int Usage()
           eval-combine <out.json> <dump.json>...   GS-HOTA over several eval dumps, combined like TrackEval
           foosball detect <in.mp4> <out.mp4>       foosball ball/figure boxes on a recording, prints % frames with ball
                                                                         (--detector <json>, --stride <n>, --max-frames <n>)
+          foosball calibrate <video> <calib.json> x1,y1 x2,y2 x3,y3 x4,y4   table homography from playfield corners
+                                                                        (0,0),(L,0),(L,W),(0,W); writes calib.jpg preview (--table <json>)
         """);
     return 1;
 }

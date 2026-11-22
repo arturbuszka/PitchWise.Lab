@@ -1,5 +1,8 @@
 using System.Diagnostics;
+using System.Globalization;
 using OpenCvSharp;
+using PitchWise.Foosball;
+using PitchWise.Foosball.Vision.Calibration;
 using PitchWise.Foosball.Vision.Detection;
 using PitchWise.Foosball.Vision.Frames;
 
@@ -7,6 +10,7 @@ using PitchWise.Foosball.Vision.Frames;
 static class FoosballCommands
 {
     public const string DefaultDetectorConfig = "configs/foosball/detector.json";
+    public const string DefaultTableConfig = "configs/foosball/table.json";
 
     /// <summary>
     /// Runs the detector over a recording and writes it back with boxes drawn. Prints the share of
@@ -74,5 +78,75 @@ static class FoosballCommands
                           $"detector {msPerFrame:F1} ms/frame on {detector.Provider}");
         Console.WriteLine($"written: {output}");
         return 0;
+    }
+
+    /// <summary>
+    /// Builds a calibration from four hand-picked playfield corners and writes it next to a preview
+    /// (<c>calib.jpg</c>): the table model drawn back onto the first frame, so a wrong corner shows
+    /// as rods and goals off their real place.
+    /// </summary>
+    /// <param name="corners">"x,y" pixels in the order (0,0), (L,0), (L,W), (0,W) of the table model.</param>
+    public static int Calibrate(string video, string calibPath, string tableConfig, string[] corners)
+    {
+        var points = new Point2f[corners.Length];
+        for (var i = 0; i < corners.Length; i++)
+        {
+            var parts = corners[i].Split(',');
+            if (parts.Length != 2
+                || !float.TryParse(parts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out var x)
+                || !float.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out var y))
+            {
+                Console.Error.WriteLine($"corner '{corners[i]}' is not x,y");
+                return 1;
+            }
+            points[i] = new Point2f(x, y);
+        }
+
+        var table = TableModel.Load(tableConfig);
+        using var source = new VideoFileFrameSource(video);
+        using var frame = source.ReadFrames().FirstOrDefault();
+        if (frame is null)
+        {
+            Console.Error.WriteLine($"{video} has no frames");
+            return 1;
+        }
+
+        var calibration = TableCalibration.FromCorners(points, new Size(source.Width, source.Height), table);
+        Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(calibPath))!);
+        calibration.Save(calibPath);
+
+        DrawTableModel(frame.Image, calibration);
+        var preview = Path.ChangeExtension(calibPath, ".jpg");
+        Cv2.ImWrite(preview, frame.Image);
+        Console.WriteLine($"written: {calibPath}, preview: {preview}");
+        return 0;
+    }
+
+    /// <summary>Outline, goal mouths and rods of the table model, projected into the image.</summary>
+    private static void DrawTableModel(Mat image, TableCalibration calibration)
+    {
+        var t = calibration.Table;
+        var outline = new Scalar(0, 255, 255);
+        var goal = new Scalar(0, 0, 255);
+        var rod = new Scalar(255, 255, 255);
+        Point Px(double x, double y)
+        {
+            var p = calibration.ToImage(new Point2d(x, y));
+            return new Point((int)Math.Round(p.X), (int)Math.Round(p.Y));
+        }
+
+        Cv2.Polylines(image, [[Px(0, 0), Px(t.Length, 0), Px(t.Length, t.Width), Px(0, t.Width)]], true, outline, 2);
+        var g0 = (t.Width - t.GoalWidth) / 2;
+        var g1 = (t.Width + t.GoalWidth) / 2;
+        Cv2.Line(image, Px(0, g0), Px(0, g1), goal, 5);
+        Cv2.Line(image, Px(t.Length, g0), Px(t.Length, g1), goal, 5);
+        foreach (var r in t.Rods)
+        {
+            Cv2.Line(image, Px(r.X, 0), Px(r.X, t.Width), rod, 1);
+            // Figures at rest position: centred across the table.
+            var first = (t.Width - (r.FigureCount - 1) * r.FigureSpacing) / 2;
+            for (var i = 0; i < r.FigureCount; i++)
+                Cv2.Circle(image, Px(r.X, first + i * r.FigureSpacing), 4, rod, -1);
+        }
     }
 }
