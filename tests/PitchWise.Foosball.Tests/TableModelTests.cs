@@ -12,7 +12,7 @@ public class TableModelTests
     public void ShippedConfigLoadsAndValidates()
     {
         var table = LoadShipped();
-        Assert.Equal(2 * TableModel.RodsPerSide, table.Rods.Count);
+        Assert.NotEmpty(table.Rods);
     }
 
     [Fact]
@@ -23,11 +23,12 @@ public class TableModelTests
     }
 
     [Fact]
-    public void EachPlayerHasOneRodOfEachRole()
+    public void BothPlayersHaveTheSameRods()
     {
         var table = LoadShipped();
-        foreach (var side in Enum.GetValues<TableSide>())
-            Assert.Equal(Enum.GetValues<RodRole>().Order(), table.RodsOf(side).Select(r => r.Role).Order());
+        Assert.Equal(
+            table.RodsOf(TableSide.Left).Select(r => r.Role).Order(),
+            table.RodsOf(TableSide.Right).Select(r => r.Role).Order());
     }
 
     [Fact]
@@ -57,5 +58,29 @@ public class TableModelTests
     {
         var table = LoadShipped();
         Assert.Throws<InvalidDataException>(() => (table with { Rods = table.Rods.Skip(1).ToList() }).Validate());
+    }
+
+    [Fact]
+    public void DuplicateRoleIsRejected()
+    {
+        var table = LoadShipped();
+        var rods = table.Rods.ToList();
+        var left = rods.FindAll(r => r.Owner == TableSide.Left);
+        rods[rods.IndexOf(left[1])] = left[1] with { Role = left[0].Role };
+        Assert.Throws<InvalidDataException>(() => (table with { Rods = rods }).Validate());
+    }
+
+    [Fact]
+    public void FullSizeEightRodTableIsAccepted()
+    {
+        RodSpec Rod(RodRole role, TableSide side, double x, int n, double s) => new(role, side, x, n, s);
+        var table = new TableModel(1.20, 0.68, 0.20,
+        [
+            Rod(RodRole.Goalkeeper, TableSide.Left, 0.075, 1, 0), Rod(RodRole.Defense, TableSide.Left, 0.225, 2, 0.24),
+            Rod(RodRole.Attack, TableSide.Right, 0.375, 3, 0.20), Rod(RodRole.Midfield, TableSide.Left, 0.525, 5, 0.12),
+            Rod(RodRole.Midfield, TableSide.Right, 0.675, 5, 0.12), Rod(RodRole.Attack, TableSide.Left, 0.825, 3, 0.20),
+            Rod(RodRole.Defense, TableSide.Right, 0.975, 2, 0.24), Rod(RodRole.Goalkeeper, TableSide.Right, 1.125, 1, 0),
+        ]);
+        table.Validate();
     }
 }

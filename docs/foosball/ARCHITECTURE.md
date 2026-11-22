@@ -6,7 +6,9 @@ na telewizorze, a bar może robić rankingi (np. najszybszy strzał wieczoru).
 
 ## Założenia
 
-- Mecze 1v1, jeden stół (mniejszy), jaskrawa **matowa żółta piłka** dobrana pod kamerę.
+- Mecze 1v1, jeden stół (mniejszy), jaskrawa **matowa piłka** dobrana pod kamerę, w kolorze, którego nie ma na stole.
+- Do testów służy mały stół: boisko 585 × 342 mm, 6 drążków po 3 figurki (`configs/foosball/table.json`).
+  Liczba drążków pochodzi z konfiguracji, więc docelowy stół w barze to tylko inny plik.
 - Bar to nie laboratorium: własne oświetlenie LED stołu, elektronika schowana, start jednym przyciskiem.
 - Obsługuje to barman, więc system kalibruje się raz i potem działa bez ingerencji.
 - **Gol liczy czujnik IR** (źródło prawdy). Kamera tylko go potwierdza i dostarcza resztę statystyk.
@@ -82,6 +84,29 @@ podania między drążkami, mapa cieplna piłki, czas meczu. Później: wykrywan
 Każdy krok ma **cel** (po co), **zakres** (co dokładnie) i **gotowe, gdy** (jak sprawdzić).
 Jeden krok = jeden mały commit. Kroki odhaczamy tutaj.
 
+### Etap 0 — Własny stół (równolegle z etapami 1–2)
+
+Budujemy pełnowymiarowy stół (boisko ok. 1,2 × 0,7 m, 8 drążków), od początku zaprojektowany pod system.
+Do tego czasu dane zbieramy na stole testowym.
+
+- [ ] **0.1 Wymagania i wymiary**
+  - Cel: jedna lista wszystkiego, co stół ma pomieścić, zanim powstanie projekt.
+  - Zakres: wymiary boiska i drążków; miejsca na kamerę górną, kamery na szynach do powtórek, kamery za bramkami,
+    bariery IR, podajnik, ekrany LCD na reklamy, oświetlenie, elektronikę i prowadzenie kabli.
+  - Gotowe, gdy: `docs/foosball/table-build.md` z wymiarami i listą.
+- [ ] **0.2 Projekt CAD i lista zakupów**
+  - Cel: wiedzieć, co kupić i wydrukować.
+  - Zakres: rama z profili 2020 (z nogami i stelażem kamery jako jedna konstrukcja), części do druku, lista zakupów z kosztami.
+  - Gotowe, gdy: model CAD i lista zakupów w `docs/foosball/table-build.md`.
+- [ ] **0.3 Rama, nogi i stelaż kamery**
+  - Gotowe, gdy: rama złożona, poziom i kąty sprawdzone, kamera wisi sztywno nad środkiem boiska.
+- [ ] **0.4 Boisko, drążki i figurki**
+  - Gotowe, gdy: da się zagrać mecz, drążki chodzą lekko i bez luzu, figurki wytrzymują mocne strzały.
+- [ ] **0.5 Bramki z miejscem na IR i podajnik**
+  - Gotowe, gdy: piłka po golu trafia w miejsce, gdzie zmieszczą się bariery IR (5.2) i podajnik (5.4).
+- [ ] **0.6 Konfiguracja stołu**
+  - Gotowe, gdy: `configs/foosball/table.json` opisuje nowy stół, zmierzony miarką, i testy przechodzą.
+
 ### Etap 1 — Szkielet i dane
 
 - [ ] **1.1 Szkielet projektów**
@@ -90,7 +115,7 @@ Jeden krok = jeden mały commit. Kroki odhaczamy tutaj.
   - Gotowe, gdy: `dotnet build` i `dotnet test` przechodzą, jeden test-placeholder jest zielony.
 - [ ] **1.2 Model stołu**
   - Cel: jedno miejsce prawdy o geometrii stołu (jak `PitchModel` dla boiska).
-  - Zakres: wymiary boiska, położenia 8 drążków, przypisanie drążków do graczy, wymiary bramek. Wartości z konfiguracji.
+  - Zakres: wymiary boiska, położenia drążków (liczba z konfiguracji), przypisanie drążków do graczy, wymiary bramek. Wartości z konfiguracji.
   - Gotowe, gdy: testy sprawdzają, że drążki leżą na boisku i są symetryczne między stronami.
 - [ ] **1.3 Nagrania testowe**
   - Cel: materiał do pracy niezależny od baru.

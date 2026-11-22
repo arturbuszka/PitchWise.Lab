@@ -1,0 +1,35 @@
+{
+  "dictionary": "DICT_4X4_50",
+  "markerSizeMm": 40,
+  "origin": "bottom-left corner of the playfield, x along length, y across (print orientation)",
+  "markers": [
+    {
+      "id": 0,
+      "centreMm": [
+        38.0,
+        38.0
+      ]
+    },
+    {
+      "id": 1,
+      "centreMm": [
+        1162.0,
+        38.0
+      ]
+    },
+    {
+      "id": 2,
+      "centreMm": [
+        1162.0,
+        662.0
+      ]
+    },
+    {
+      "id": 3,
+      "centreMm": [
+        38.0,
+        662.0
+      ]
+    }
+  ]
+}

@@ -10,6 +10,9 @@
        executables and test projects, since native assets only flow to their output. -->
   <ItemGroup>
     <PackageReference Include="OpenCvSharp4" Version="4.13.0.20260627" />
+    <!-- Same ONNX Runtime packages as PitchWise.GameState, so one native runtime serves both. -->
+    <PackageReference Include="Microsoft.ML.OnnxRuntime.DirectML" Version="1.24.4" Condition="!$([MSBuild]::IsOSPlatform('Linux'))" />
+    <PackageReference Include="Microsoft.ML.OnnxRuntime.Gpu.Linux" Version="1.24.4" Condition="$([MSBuild]::IsOSPlatform('Linux'))" />
   </ItemGroup>
 
   <ItemGroup>

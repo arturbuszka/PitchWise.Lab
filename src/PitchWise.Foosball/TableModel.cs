@@ -23,9 +23,6 @@ public record RodSpec(RodRole Role, TableSide Owner, double X, int FigureCount, 
 /// </summary>
 public record TableModel(double Length, double Width, double GoalWidth, IReadOnlyList<RodSpec> Rods)
 {
-    /// <summary>Rods per player: goalkeeper, defense, midfield, attack.</summary>
-    public const int RodsPerSide = 4;
-
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         // Comments let the config say which values are still unmeasured.
@@ -55,15 +52,18 @@ public record TableModel(double Length, double Width, double GoalWidth, IReadOnl
             throw new InvalidDataException($"Table size must be positive, got {Length} × {Width}");
         if (GoalWidth <= 0 || GoalWidth >= Width)
             throw new InvalidDataException($"Goal width {GoalWidth} must be within table width {Width}");
-        if (Rods is null || Rods.Count != 2 * RodsPerSide)
-            throw new InvalidDataException($"Expected {2 * RodsPerSide} rods, got {Rods?.Count ?? 0}");
+        // Rod count varies between tables (8 on full-size, 6 on small ones), so it comes from the
+        // config; what must hold is that both players get the same set of rods, one per role.
+        if (Rods is null || Rods.Count == 0)
+            throw new InvalidDataException("Table has no rods");
 
-        foreach (var side in Enum.GetValues<TableSide>())
-        {
-            var roles = RodsOf(side).Select(r => r.Role).ToHashSet();
-            if (roles.Count != RodsPerSide || RodsOf(side).Count() != RodsPerSide)
-                throw new InvalidDataException($"Player {side} must have exactly one rod of each role");
-        }
+        var left = RodsOf(TableSide.Left).Select(r => r.Role).Order().ToList();
+        var right = RodsOf(TableSide.Right).Select(r => r.Role).Order().ToList();
+        if (left.Count != left.Distinct().Count() || right.Count != right.Distinct().Count())
+            throw new InvalidDataException("A player has two rods with the same role");
+        if (!left.SequenceEqual(right))
+            throw new InvalidDataException(
+                $"Players have different rods: Left [{string.Join(", ", left)}], Right [{string.Join(", ", right)}]");
 
         foreach (var rod in Rods)
         {
