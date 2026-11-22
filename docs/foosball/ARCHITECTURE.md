@@ -156,7 +156,7 @@ Do tego czasu dane zbieramy na stole testowym.
   - Cel: piłka i figurki na pojedynczej klatce, w pikselach.
   - Zakres: interfejs detektora + implementacja ONNX (preprocessing, NMS). Bez śledzenia.
   - Gotowe, gdy: test na kilku oznaczonych klatkach znajduje piłkę w zadanej tolerancji.
-- [ ] **3.3 Komenda CLI z nakładką**
+- [x] **3.3 Komenda CLI z nakładką**
   - Cel: zobaczyć detekcję na całym nagraniu.
   - Zakres: `foosball detect wejście.mp4 wyjście.mp4` rysuje boksy i wypisuje % klatek z piłką.
   - Gotowe, gdy: wideo z boksami i liczba na wyjściu.

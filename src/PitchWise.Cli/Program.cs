@@ -55,6 +55,10 @@ var cacheDir = TakeOption("--cache");
 var fromCacheDir = TakeOption("--from-cache");
 var rerun = TakeOption("--rerun")?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             ?? Array.Empty<string>();
+// foosball detect: detector config, process every Nth frame, stop after N processed frames
+var foosballDetector = TakeOption("--detector") ?? FoosballCommands.DefaultDetectorConfig;
+var foosballStride = int.Parse(TakeOption("--stride") ?? "1");
+var foosballMaxFrames = int.Parse(TakeOption("--max-frames") ?? "0");
 configPath ??= File.Exists("configs/soccernet.yaml") ? "configs/soccernet.yaml" : null;
 var config = PipelineConfig.Load(configPath);
 if (configPath is not null)
@@ -78,6 +82,8 @@ return args switch
     ["eval", var dataset, var split, var video, .. var rest] => Eval(dataset, split, video,
         rest.Length > 0 ? rest[0] : null,
         rest.Length > 1 ? int.Parse(rest[1]) : 0),
+    ["foosball", "detect", var input, var output] =>
+        FoosballCommands.Detect(input, output, foosballDetector, foosballStride, foosballMaxFrames),
     ["eval-combine", var output, .. var inputs] when inputs.Length > 0 => EvalCombine(output, inputs),
     _ => Usage(),
 };
@@ -96,6 +102,8 @@ int Usage()
                                                                          --cache <dir> saves the pipeline state,
                                                                          --from-cache <dir> --rerun <Module,..> reuses it)
           eval-combine <out.json> <dump.json>...   GS-HOTA over several eval dumps, combined like TrackEval
+          foosball detect <in.mp4> <out.mp4>       foosball ball/figure boxes on a recording, prints % frames with ball
+                                                                        (--detector <json>, --stride <n>, --max-frames <n>)
         """);
     return 1;
 }

@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\PitchWise.GameState\PitchWise.GameState.csproj" />
+    <ProjectReference Include="..\PitchWise.Foosball.Vision\PitchWise.Foosball.Vision.csproj" />
   </ItemGroup>
 
   <ItemGroup>
