@@ -109,49 +109,50 @@ Do tego czasu dane zbieramy na stole testowym.
 
 ### Etap 1 — Szkielet i dane
 
-- [ ] **1.1 Szkielet projektów**
+- [x] **1.1 Szkielet projektów**
   - Cel: mieć miejsce na kod, zanim powstanie kod.
   - Zakres: puste projekty `PitchWise.Foosball`, `PitchWise.Foosball.Vision`, `tests/PitchWise.Foosball.Tests`, dodane do `PitchWise.slnx`.
   - Gotowe, gdy: `dotnet build` i `dotnet test` przechodzą, jeden test-placeholder jest zielony.
-- [ ] **1.2 Model stołu**
+- [x] **1.2 Model stołu**
   - Cel: jedno miejsce prawdy o geometrii stołu (jak `PitchModel` dla boiska).
   - Zakres: wymiary boiska, położenia drążków (liczba z konfiguracji), przypisanie drążków do graczy, wymiary bramek. Wartości z konfiguracji.
   - Gotowe, gdy: testy sprawdzają, że drążki leżą na boisku i są symetryczne między stronami.
-- [ ] **1.3 Nagrania testowe**
+- [x] **1.3 Nagrania testowe**
   - Cel: materiał do pracy niezależny od baru.
   - Zakres: 10–20 min gry z góry (najlepiej docelową kamerą, ewentualnie telefon w slow-mo), w tym mocne strzały, zasłonięcia, gole.
   - Gotowe, gdy: pliki opisane w `docs/foosball/recordings.md` (co jest na którym, fps, rozdzielczość). Wideo poza repo.
-- [ ] **1.4 Wycinanie klatek do oznaczania**
+- [x] **1.4 Wycinanie klatek do oznaczania**
   - Cel: dane do treningu YOLO.
   - Zakres: skrypt w `tools/training/` wybierający różnorodne klatki (co N-ta + klatki z szybkim ruchem).
   - Gotowe, gdy: ~500–1000 klatek w katalogu, gotowych do importu w CVAT albo Roboflow.
-- [ ] **1.5 Oznaczenie danych**
+  - Zrobione inaczej: klatki próbkuje Roboflow przy uploadzie (~3/s), bez własnego skryptu.
+- [x] **1.5 Oznaczenie danych**
   - Cel: zbiór uczący.
   - Zakres: klasy `ball` i `figure`. Podział train/val/test.
   - Gotowe, gdy: eksport w formacie YOLO i krótki opis klas i zasad oznaczania w `tools/training/README.md`.
 
 ### Etap 2 — YOLO
 
-- [ ] **2.1 Pierwszy trening**
+- [x] **2.1 Pierwszy trening**
   - Cel: działający model, nawet słaby.
   - Zakres: mały model (np. YOLO11n), domyślne ustawienia, trening w Colab albo lokalnie.
   - Gotowe, gdy: zapisane mAP dla `ball` i `figure` na zbiorze val.
-- [ ] **2.2 Eksport do ONNX**
+- [x] **2.2 Eksport do ONNX**
   - Cel: model gotowy do .NET.
   - Zakres: eksport, opis w `docs/MODELS.md`, plik modelu poza repo (jak reszta modeli).
   - Gotowe, gdy: model ładuje się w ONNX Runtime i zwraca wyjście o oczekiwanym kształcie.
-- [ ] **2.3 Ocena na trudnych przypadkach**
+- [x] **2.3 Ocena na trudnych przypadkach**
   - Cel: wiedzieć, gdzie model zawodzi, zanim zbudujemy na nim resztę.
   - Zakres: recall piłki osobno dla: piłka swobodna, szybki strzał, częściowe zasłonięcie.
   - Gotowe, gdy: tabela wyników w `docs/foosball/eval.md` i decyzja: wystarczy / dooznaczyć dane.
 
 ### Etap 3 — Vision na nagraniach
 
-- [ ] **3.1 Źródło klatek z pliku**
+- [x] **3.1 Źródło klatek z pliku**
   - Cel: jednolity sposób podawania klatek (później podmienimy na kamerę).
   - Zakres: interfejs źródła klatek + implementacja dla pliku wideo, z numerem klatki i znacznikiem czasu.
   - Gotowe, gdy: test czyta krótkie wideo i zgadza się liczba klatek oraz fps.
-- [ ] **3.2 Detektor YOLO**
+- [x] **3.2 Detektor YOLO**
   - Cel: piłka i figurki na pojedynczej klatce, w pikselach.
   - Zakres: interfejs detektora + implementacja ONNX (preprocessing, NMS). Bez śledzenia.
   - Gotowe, gdy: test na kilku oznaczonych klatkach znajduje piłkę w zadanej tolerancji.

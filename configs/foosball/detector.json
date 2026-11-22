@@ -1,0 +1,10 @@
+// Foosball YOLO detector (step 3.2). Thresholds come from docs/foosball/eval.md:
+// at 0.25 every ball on the held-out video was found.
+{
+  "modelPath": "pretrained_models/foosball-yolo11n-v4.onnx",
+  "inputSize": 1280,
+  "ballMinConfidence": 0.25,
+  "figureMinConfidence": 0.4,
+  "nmsIou": 0.45,
+  "useGpu": true
+}
