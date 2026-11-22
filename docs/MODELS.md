@@ -21,7 +21,7 @@ files are present.
 | ReID, role | `prtreid-soccernet-baseline.onnx` | Appearance and role | [PRTReid weights](https://zenodo.org/records/10653453) | CC-BY-4.0 |
 | Calibration | `nbjw_kp.onnx`, `nbjw_lines.onnx` and their `.onnx.data` | Pitch homography | [NBJW weights](https://zenodo.org/records/12626395) | CC-BY-4.0 |
 | Jersey OCR | `mmocr_det.onnx`, `mmocr_rec.onnx`, `mmocr_charset.txt` | Shirt numbers | [PP-OCRv4](https://github.com/PaddlePaddle/PaddleOCR) | Apache-2.0 |
-| Foosball | `foosball-yolo11n-v1.onnx` | Ball and figures (foosball only, not in the release yet) | Trained here, see below | AGPL-3.0 (Ultralytics) |
+| Foosball | `foosball-yolo11n-v4.onnx` | Ball and figures (foosball only, not in the release yet) | Trained here, see below | AGPL-3.0 (Ultralytics) |
 
 ### Foosball detector
 
@@ -30,11 +30,11 @@ output `[1, 6, 33600]`. Data and labelling rules: `tools/training/README.md`. Tr
 (`imgsz=1280, epochs=100, batch=16`), then exported with:
 
 ```bash
-yolo export model=best_v1.pt format=onnx imgsz=1280 simplify=True   # opset 18
+yolo export model=best-v4.pt format=onnx imgsz=1280 simplify=True   # opset 18
 ```
 
-Copy the result to `pretrained_models/foosball-yolo11n-v1.onnx`
-(sha256 `954e07a124498de32d2e91f4f90b776c968dc5e863d180340f28e301d34ba250`).
+Copy the result to `pretrained_models/foosball-yolo11n-v4.onnx`
+(sha256 `8cf57b968d1742388518dae448a4c3341bd6af08f81e480d9ff1525c952a311b`).
 
 All files were converted to ONNX for this project; the weights are otherwise unchanged. The OCR files
 keep their `mmocr_` names because they replace MMOCR from the original baseline, whose export

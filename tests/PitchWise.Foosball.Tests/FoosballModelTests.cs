@@ -8,7 +8,7 @@ namespace PitchWise.Foosball.Tests;
 /// </summary>
 public class FoosballModelTests
 {
-    private const string ModelFile = "pretrained_models/foosball-yolo11n-v1.onnx";
+    private const string ModelFile = "pretrained_models/foosball-yolo11n-v4.onnx";
     private const int ImageSize = 1280;
     private const int Classes = 2; // ball, figure
 
