@@ -170,7 +170,7 @@ Do tego czasu dane zbieramy na stole testowym.
   - Gotowe, gdy: błąd reprojekcji zapisany, linie boiska proste na podglądzie.
   - **Odłożone do kamery docelowej** (2026-11-23). Na iPhonie 13 mini (film 5) długie krawędzie stołu
     wyginają się o 0,8–1,8 px, w tę samą stronę u góry i u dołu, więc to nie dystorsja. Dopasowany k1
-    zmienia pozycje na boisku o ok. 0,3 mm (ostrożnie do 1,5 mm), a paralaksa piłki to ok. 6,5 mm przy
+    zmienia pozycje na boisku o ok. 0,3 mm (ostrożnie do 1,5 mm), a paralaksa piłki to ok. 8 mm przy
     bramce. Nagrania szachownicy (IMG_0454–0458) nie obejmują brzegów kadru i są prawie bez pochyleń,
     więc nie nadają się do kalibracji.
 - [ ] **3.6 Śledzenie piłki**
@@ -185,6 +185,11 @@ Do tego czasu dane zbieramy na stole testowym.
   - Cel: zamknąć kontrakt wizja → Engine.
   - Zakres: piłka + drążki jako wirtualni zawodnicy. Zapis `world_state.jsonl` jak w `analyze`.
   - Gotowe, gdy: plik odtwarza się przez `WorldStateReplay`.
+- [ ] **3.9 Podgląd w PitchWise.App**
+  - Cel: oglądać wynik śledzenia w aplikacji, a nie tylko w pliku wideo.
+  - Zakres: wybór nagrania piłkarzyków i kalibracji. Obraz z piłką, śladem, drążkami i figurkami, obok stół
+    z góry w metrach. Pauza, przewijanie, włączanie warstw. App korzysta z `Foosball.Vision`, nie odwrotnie.
+  - Gotowe, gdy: film 5 odtwarza się w App z nakładką.
 
 ### Etap 4 — Reguły i statystyki
 

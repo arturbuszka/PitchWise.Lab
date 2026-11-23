@@ -18,6 +18,8 @@
 
   <ItemGroup>
     <None Include="..\..\configs\foosball\table.json" Link="table.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\configs\foosball\engine.json" Link="engine.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\configs\foosball\tracker.json" Link="tracker.json" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Data\frames\*" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 

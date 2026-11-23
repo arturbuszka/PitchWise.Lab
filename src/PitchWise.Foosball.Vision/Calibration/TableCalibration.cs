@@ -8,7 +8,7 @@ namespace PitchWise.Foosball.Vision.Calibration;
 /// homography of the playfield plane.
 ///
 /// The homography holds only for points on the playfield surface. The ball centre sits about
-/// 17 mm above it and the camera about 760 mm, so a ball near the edge lands a few millimetres
+/// 17 mm above it and the camera about 615 mm, so a ball near the edge lands a few millimetres
 /// too far out; that parallax correction belongs to ball tracking (3.6/3.7), not here.
 /// </summary>
 public sealed class TableCalibration

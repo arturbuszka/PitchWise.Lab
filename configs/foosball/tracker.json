@@ -1,0 +1,9 @@
+// Ball projection (step 3.6), metres.
+{
+  "ballHeight": 0.017,
+  // Mat to phone holder measured with a ruler: 0.615; the lens sits within 5 mm of it.
+  "cameraHeight": 0.615,
+  // Point on the table straight below the camera; left out = table centre.
+  // "cameraX": 0.2925, "cameraY": 0.171,
+  "outsideMargin": 0.03
+}

@@ -1,0 +1,13 @@
+// EngineConfig for the foosball table (step 3.6). Starting guesses, tuned in 3.6b.
+// Pitch size comes from table.json. Possession and rule thresholds are still the football
+// defaults (metres on a 105 m pitch) and mean nothing here until stage 4 sets them.
+{
+  // Same as the detector's threshold; the engine default (0.35) would drop balls it accepted.
+  "minBallConfidence": 0.25,
+  "maxBallSpeed": 15.0,
+  // Short on purpose: BallFilter takes back a ball that is far from the prediction only after this.
+  "maxCoastSeconds": 0.25,
+  // Ball changes direction within one frame on a wall or a figure.
+  "ballProcessNoise": 300.0,
+  "ballMeasurementNoise": 0.003
+}
