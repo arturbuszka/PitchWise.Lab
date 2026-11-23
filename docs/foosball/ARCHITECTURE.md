@@ -168,6 +168,11 @@ Do tego czasu dane zbieramy na stole testowym.
   - Cel: proste linie stołu na obrazie z szerokiego obiektywu.
   - Zakres: kalibracja szachownicą (jednorazowa), parametry w pliku, zastosowanie przed homografią.
   - Gotowe, gdy: błąd reprojekcji zapisany, linie boiska proste na podglądzie.
+  - **Odłożone do kamery docelowej** (2026-11-23). Na iPhonie 13 mini (film 5) długie krawędzie stołu
+    wyginają się o 0,8–1,8 px, w tę samą stronę u góry i u dołu, więc to nie dystorsja. Dopasowany k1
+    zmienia pozycje na boisku o ok. 0,3 mm (ostrożnie do 1,5 mm), a paralaksa piłki to ok. 6,5 mm przy
+    bramce. Nagrania szachownicy (IMG_0454–0458) nie obejmują brzegów kadru i są prawie bez pochyleń,
+    więc nie nadają się do kalibracji.
 - [ ] **3.6 Śledzenie piłki**
   - Cel: gładka trajektoria, która przeżywa krótkie zasłonięcia.
   - Zakres: detekcja → `BallObservation` → `BallFilter` z `EngineConfig` dla piłkarzyków.
