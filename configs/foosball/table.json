@@ -1,17 +1,18 @@
 // Small test table (not the bar's target table), metres. Convention: see TableModel.cs.
-// Measured with a ruler: length, width. From the top-down photo (±2 mm, to confirm with a
-// ruler): rod x, figure spacing, goal width. Rods idealised to 97 mm pitch so they are symmetric.
+// Measured with a ruler: length, width, rods (465 mm between the outer edges of the outer rods,
+// 8 mm rod diameter, so 91.4 mm pitch). From film 5 corrected for rod height: figure spacing.
+// From the top-down photo (to confirm with a ruler): goal width. Rods are placed symmetrically.
 // Order from the Left (yellow) goal: L goalkeeper, R attack, L midfield, R midfield, L attack, R goalkeeper.
 {
   "length": 0.585,
   "width": 0.342,
   "goalWidth": 0.100,
   "rods": [
-    { "role": "Goalkeeper", "owner": "Left",  "x": 0.050, "figureCount": 3, "figureSpacing": 0.097 },
-    { "role": "Attack",     "owner": "Right", "x": 0.147, "figureCount": 3, "figureSpacing": 0.097 },
-    { "role": "Midfield",   "owner": "Left",  "x": 0.244, "figureCount": 3, "figureSpacing": 0.097 },
-    { "role": "Midfield",   "owner": "Right", "x": 0.341, "figureCount": 3, "figureSpacing": 0.097 },
-    { "role": "Attack",     "owner": "Left",  "x": 0.438, "figureCount": 3, "figureSpacing": 0.097 },
-    { "role": "Goalkeeper", "owner": "Right", "x": 0.535, "figureCount": 3, "figureSpacing": 0.097 }
+    { "role": "Goalkeeper", "owner": "Left",  "x": 0.0640, "figureCount": 3, "figureSpacing": 0.0915 },
+    { "role": "Attack",     "owner": "Right", "x": 0.1554, "figureCount": 3, "figureSpacing": 0.0915 },
+    { "role": "Midfield",   "owner": "Left",  "x": 0.2468, "figureCount": 3, "figureSpacing": 0.0915 },
+    { "role": "Midfield",   "owner": "Right", "x": 0.3382, "figureCount": 3, "figureSpacing": 0.0915 },
+    { "role": "Attack",     "owner": "Left",  "x": 0.4296, "figureCount": 3, "figureSpacing": 0.0915 },
+    { "role": "Goalkeeper", "owner": "Right", "x": 0.5210, "figureCount": 3, "figureSpacing": 0.0915 }
   ]
 }

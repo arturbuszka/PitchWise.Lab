@@ -1,4 +1,4 @@
-// Ball projection (step 3.6), metres.
+// Ball (step 3.6) and rods (3.7), metres and seconds.
 {
   "ballHeight": 0.017,
   // Mat to phone holder measured with a ruler: 0.615; the lens sits within 5 mm of it.
@@ -6,5 +6,14 @@
   // Point on the table straight below the camera; left out = table centre.
   // "cameraX": 0.2925, "cameraY": 0.171,
   "outsideMargin": 0.03,
-  "trailSeconds": 0.5
+  "trailSeconds": 0.5,
+
+  // Rods (step 3.7). Height of the axis measured with a ruler, about 50 mm. The rest are starting
+  // guesses, checked on film 5 in 3.7b.
+  "rodHeight": 0.050,
+  "rodAssignDistance": 0.040,
+  "rodFitTolerance": 0.012,
+  "rodMaxSpeed": 5.0,
+  "rodMaxHoldSeconds": 0.5,
+  "rodSmoothingSeconds": 0.005
 }
