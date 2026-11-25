@@ -173,7 +173,7 @@ Do tego czasu dane zbieramy na stole testowym.
     zmienia pozycje na boisku o ok. 0,3 mm (ostrożnie do 1,5 mm), a paralaksa piłki to ok. 8 mm przy
     bramce. Nagrania szachownicy (IMG_0454–0458) nie obejmują brzegów kadru i są prawie bez pochyleń,
     więc nie nadają się do kalibracji.
-- [ ] **3.6 Śledzenie piłki**
+- [x] **3.6 Śledzenie piłki**
   - Cel: gładka trajektoria, która przeżywa krótkie zasłonięcia.
   - Zakres: detekcja → `BallObservation` → `BallFilter` z `EngineConfig` dla piłkarzyków.
   - Gotowe, gdy: na nakładce widać trajektorię, a w krótkich zasłonięciach pozycja jest przewidywana.

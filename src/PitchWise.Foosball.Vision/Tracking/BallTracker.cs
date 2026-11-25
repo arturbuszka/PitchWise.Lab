@@ -46,9 +46,8 @@ public sealed class BallTracker
         var seen = _calibration.ToTable(new Point2d(ball.Center.X, ball.Center.Y));
         // The homography puts the ball where its line of sight meets the mat, beyond the ball itself;
         // moving back towards the point below the camera by the height ratio gives the real position.
-        var scale = (_options.CameraHeight - _options.BallHeight) / _options.CameraHeight;
-        var x = _belowCamera.X + (seen.X - _belowCamera.X) * scale;
-        var y = _belowCamera.Y + (seen.Y - _belowCamera.Y) * scale;
+        var x = _belowCamera.X + (seen.X - _belowCamera.X) * ParallaxScale;
+        var y = _belowCamera.Y + (seen.Y - _belowCamera.Y) * ParallaxScale;
 
         var margin = _options.OutsideMargin;
         var table = _calibration.Table;
@@ -56,4 +55,11 @@ public sealed class BallTracker
             return BallObservation.Missing;
         return new BallObservation(x, y, ball.Confidence, true);
     }
+
+    /// <summary>Pixel where a ball at this table position is seen; undoes the parallax correction of <see cref="Observe"/>.</summary>
+    public Point2d ToImage(double x, double y) => _calibration.ToImage(new Point2d(
+        _belowCamera.X + (x - _belowCamera.X) / ParallaxScale,
+        _belowCamera.Y + (y - _belowCamera.Y) / ParallaxScale));
+
+    private double ParallaxScale => (_options.CameraHeight - _options.BallHeight) / _options.CameraHeight;
 }

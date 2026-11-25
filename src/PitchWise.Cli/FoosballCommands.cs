@@ -5,12 +5,15 @@ using PitchWise.Foosball;
 using PitchWise.Foosball.Vision.Calibration;
 using PitchWise.Foosball.Vision.Detection;
 using PitchWise.Foosball.Vision.Frames;
+using PitchWise.Foosball.Vision.Tracking;
 
 /// <summary>The <c>foosball</c> commands: offline analysis of table recordings.</summary>
 static class FoosballCommands
 {
     public const string DefaultDetectorConfig = "configs/foosball/detector.json";
     public const string DefaultTableConfig = "configs/foosball/table.json";
+    public const string DefaultEngineConfig = "configs/foosball/engine.json";
+    public const string DefaultTrackerConfig = "configs/foosball/tracker.json";
 
     /// <summary>
     /// Runs the detector over a recording and writes it back with boxes drawn. Prints the share of
@@ -25,9 +28,68 @@ static class FoosballCommands
             Console.Error.WriteLine("--stride must be at least 1");
             return 1;
         }
-        var options = DetectorOptions.Load(detectorConfig);
         using var source = new VideoFileFrameSource(input);
-        using var detector = new YoloOnnxDetector(options);
+        using var detector = new YoloOnnxDetector(DetectorOptions.Load(detectorConfig));
+        int withBall = 0;
+        var processed = ProcessVideo(source, detector, input, output, stride, maxFrames, (frame, detections) =>
+        {
+            if (detections.Ball is not null) withBall++;
+            DetectionOverlay.Draw(frame.Image, detections);
+        });
+        if (processed < 0) return 1;
+        Console.WriteLine($"with ball: {Percent(withBall, processed)}");
+        return 0;
+    }
+
+    /// <summary>
+    /// Tracks the ball through a recording and writes it back with its path drawn. Prints how many frames
+    /// were measured, predicted and lost, which is what tracker tuning is judged by.
+    /// </summary>
+    public static int Track(string input, string output, string? calibration, string tableConfig, string engineConfig,
+        string trackerConfig, string detectorConfig, int stride, int maxFrames)
+    {
+        if (calibration is null)
+        {
+            Console.Error.WriteLine("--calib <calib.json> is required, see foosball calibrate");
+            return 1;
+        }
+        if (stride < 1)
+        {
+            Console.Error.WriteLine("--stride must be at least 1");
+            return 1;
+        }
+        var table = TableModel.Load(tableConfig);
+        var options = TrackerOptions.Load(trackerConfig);
+        using var source = new VideoFileFrameSource(input);
+        var tracker = new BallTracker(
+            TableCalibration.Load(calibration, new Size(source.Width, source.Height), table),
+            FoosballEngineConfig.Load(engineConfig, table), options);
+        var overlay = new TrackOverlay(tracker, options.TrailSeconds);
+        using var detector = new YoloOnnxDetector(DetectorOptions.Load(detectorConfig));
+
+        int measured = 0, predicted = 0, lost = 0;
+        var processed = ProcessVideo(source, detector, input, output, stride, maxFrames, (frame, detections) =>
+        {
+            var track = tracker.Step(detections, frame.Timestamp);
+            if (track.State.Confidence <= 0) lost++;
+            else if (track.State.Interpolated) predicted++;
+            else measured++;
+            overlay.Draw(frame.Image, track, frame.Timestamp);
+        });
+        if (processed < 0) return 1;
+        Console.WriteLine($"measured: {Percent(measured, processed)}, predicted: {Percent(predicted, processed)}, " +
+                          $"lost: {Percent(lost, processed)}");
+        return 0;
+    }
+
+    private static string Percent(int count, int total) =>
+        $"{count} ({(total > 0 ? 100.0 * count / total : 0):F1}%)";
+
+    /// <summary>Detects on every Nth frame, lets <paramref name="draw"/> mark it, and writes the result.</summary>
+    /// <returns>Number of processed frames, or -1 when the output cannot be written.</returns>
+    private static int ProcessVideo(VideoFileFrameSource source, YoloOnnxDetector detector, string input, string output,
+        int stride, int maxFrames, Action<VideoFrame, FrameDetections> draw)
+    {
         Console.WriteLine($"{input}: {source.Width}x{source.Height} @ {source.Fps:F2} fps, " +
                           $"detector on {detector.Provider}, every {stride}. frame");
 
@@ -38,15 +100,16 @@ static class FoosballCommands
         if (!writer.IsOpened())
         {
             Console.Error.WriteLine($"cannot write {output}");
-            return 1;
+            return -1;
         }
 
         int totalFrames;
         using (var probe = new VideoCapture(input))
             totalFrames = (int)probe.Get(VideoCaptureProperties.FrameCount);
         var planned = maxFrames > 0 ? Math.Min(maxFrames, totalFrames / stride) : totalFrames / stride;
-        int processed = 0, withBall = 0, lastPercent = -1;
+        int processed = 0, lastPercent = -1;
         var detectTime = new Stopwatch();
+        var total = Stopwatch.StartNew();
         foreach (var frame in source.ReadFrames())
         {
             using (frame)
@@ -57,8 +120,7 @@ static class FoosballCommands
                 var detections = detector.Detect(frame.Image);
                 detectTime.Stop();
 
-                if (detections.Ball is not null) withBall++;
-                DetectionOverlay.Draw(frame.Image, detections);
+                draw(frame, detections);
                 writer.Write(frame.Image);
                 processed++;
 
@@ -72,12 +134,11 @@ static class FoosballCommands
             }
         }
 
-        var share = processed > 0 ? 100.0 * withBall / processed : 0;
         var msPerFrame = processed > 0 ? detectTime.Elapsed.TotalMilliseconds / processed : 0;
-        Console.WriteLine($"frames: {processed}, with ball: {withBall} ({share:F1}%), " +
-                          $"detector {msPerFrame:F1} ms/frame on {detector.Provider}");
+        Console.WriteLine($"frames: {processed}, detector {msPerFrame:F1} ms/frame, " +
+                          $"all {total.Elapsed.TotalMilliseconds / Math.Max(1, processed):F1} ms/frame");
         Console.WriteLine($"written: {output}");
-        return 0;
+        return processed;
     }
 
     /// <summary>

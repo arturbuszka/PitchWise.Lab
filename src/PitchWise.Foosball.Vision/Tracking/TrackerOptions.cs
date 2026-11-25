@@ -9,12 +9,14 @@ namespace PitchWise.Foosball.Vision.Tracking;
 /// <param name="OutsideMargin">How far outside the playfield a ball is still believed.</param>
 /// <param name="CameraX">Table x straight below the camera; null means the table centre.</param>
 /// <param name="CameraY">Table y straight below the camera; null means the table centre.</param>
+/// <param name="TrailSeconds">Length of the path drawn on review videos.</param>
 public sealed record TrackerOptions(
     [property: JsonRequired] double BallHeight,
     [property: JsonRequired] double CameraHeight,
     [property: JsonRequired] double OutsideMargin,
     double? CameraX = null,
-    double? CameraY = null)
+    double? CameraY = null,
+    double TrailSeconds = 0.5)
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {

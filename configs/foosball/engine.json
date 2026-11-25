@@ -1,13 +1,17 @@
-// EngineConfig for the foosball table (step 3.6). Starting guesses, tuned in 3.6b.
+// EngineConfig for the foosball table, tuned in step 3.6b on film 5 (slow play, up to 1.6 m/s) and
+// on simulated wall bounces up to 10 m/s. Provisional until there is a recording with hard shots.
 // Pitch size comes from table.json. Possession and rule thresholds are still the football
 // defaults (metres on a 105 m pitch) and mean nothing here until stage 4 sets them.
 {
   // Same as the detector's threshold; the engine default (0.35) would drop balls it accepted.
   "minBallConfidence": 0.25,
-  "maxBallSpeed": 15.0,
-  // Short on purpose: BallFilter takes back a ball that is far from the prediction only after this.
-  "maxCoastSeconds": 0.25,
-  // Ball changes direction within one frame on a wall or a figure.
-  "ballProcessNoise": 300.0,
+  // The gate limits the velocity CHANGE, so it must exceed the speed before plus after a bounce
+  // (10 m/s in, 8 m/s out = 18), not just the fastest shot.
+  "maxBallSpeed": 30.0,
+  // A ball outside the gate is taken back only after this; longer gives better prediction because
+  // BallFilter fades the speed over this window.
+  "maxCoastSeconds": 0.5,
+  // Lower smooths a resting ball more (detector jitter reads as speed), higher follows bounces faster.
+  "ballProcessNoise": 100.0,
   "ballMeasurementNoise": 0.003
 }
