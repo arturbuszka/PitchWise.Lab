@@ -9,7 +9,7 @@
   "trailSeconds": 0.5,
 
   // Rods (step 3.7). Height of the axis measured with a ruler, about 50 mm. The rest are starting
-  // guesses, checked on film 5 in 3.7b.
+  // guesses, checked on film 5 (slow play).
   "rodHeight": 0.050,
   "rodAssignDistance": 0.040,
   "rodFitTolerance": 0.012,

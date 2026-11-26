@@ -42,8 +42,8 @@ static class FoosballCommands
     }
 
     /// <summary>
-    /// Tracks the ball through a recording and writes it back with its path drawn. Prints how many frames
-    /// were measured, predicted and lost, which is what tracker tuning is judged by.
+    /// Tracks the ball and the rods through a recording and writes it back with both drawn. Prints how many
+    /// frames were measured, predicted and lost, which is what tracker tuning is judged by.
     /// </summary>
     public static int Track(string input, string output, string? calibration, string tableConfig, string engineConfig,
         string trackerConfig, string detectorConfig, int stride, int maxFrames)
@@ -61,23 +61,31 @@ static class FoosballCommands
         var table = TableModel.Load(tableConfig);
         var options = TrackerOptions.Load(trackerConfig);
         using var source = new VideoFileFrameSource(input);
-        var tracker = new BallTracker(
-            TableCalibration.Load(calibration, new Size(source.Width, source.Height), table),
-            FoosballEngineConfig.Load(engineConfig, table), options);
+        var tableCalibration = TableCalibration.Load(calibration, new Size(source.Width, source.Height), table);
+        var tracker = new BallTracker(tableCalibration, FoosballEngineConfig.Load(engineConfig, table), options);
         var overlay = new TrackOverlay(tracker, options.TrailSeconds);
+        var rodTracker = new RodTracker(tableCalibration, options);
+        var rodOverlay = new RodOverlay(new HeightProjection(tableCalibration, options), options.RodHeight);
         using var detector = new YoloOnnxDetector(DetectorOptions.Load(detectorConfig));
 
         int measured = 0, predicted = 0, lost = 0;
+        var rodMeasured = new int[table.Rods.Count];
         var processed = ProcessVideo(source, detector, input, output, stride, maxFrames, (frame, detections) =>
         {
             var track = tracker.Step(detections, frame.Timestamp);
             if (track.State.Confidence <= 0) lost++;
             else if (track.State.Interpolated) predicted++;
             else measured++;
+            var rods = rodTracker.Step(detections, frame.Timestamp);
+            for (var i = 0; i < rods.Count; i++)
+                if (rods[i].Measured) rodMeasured[i]++;
+            rodOverlay.Draw(frame.Image, rods);
             overlay.Draw(frame.Image, track, frame.Timestamp);
         });
         if (processed < 0) return 1;
-        Console.WriteLine($"measured: {Percent(measured, processed)}, predicted: {Percent(predicted, processed)}, " +
+        for (var i = 0; i < table.Rods.Count; i++)
+            Console.WriteLine($"rod {table.Rods[i].Owner} {table.Rods[i].Role}: measured {Percent(rodMeasured[i], processed)}");
+        Console.WriteLine($"ball measured: {Percent(measured, processed)}, predicted: {Percent(predicted, processed)}, " +
                           $"lost: {Percent(lost, processed)}");
         return 0;
     }

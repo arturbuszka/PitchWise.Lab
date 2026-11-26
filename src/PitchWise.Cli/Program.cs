@@ -115,7 +115,7 @@ int Usage()
           eval-combine <out.json> <dump.json>...   GS-HOTA over several eval dumps, combined like TrackEval
           foosball detect <in.mp4> <out.mp4>       foosball ball/figure boxes on a recording, prints % frames with ball
                                                                         (--detector <json>, --stride <n>, --max-frames <n>)
-          foosball track <in.mp4> <out.mp4> --calib <json>   ball path on a recording, prints % measured/predicted/lost
+          foosball track <in.mp4> <out.mp4> --calib <json>   ball path and rods on a recording, prints % measured/predicted/lost
                                                                         (--table, --engine, --tracker, --detector <json>,
                                                                          --stride <n>, --max-frames <n>)
           foosball calibrate <video> <calib.json> x1,y1 x2,y2 x3,y3 x4,y4   table homography from playfield corners

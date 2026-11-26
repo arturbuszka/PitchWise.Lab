@@ -177,7 +177,7 @@ Do tego czasu dane zbieramy na stole testowym.
   - Cel: gładka trajektoria, która przeżywa krótkie zasłonięcia.
   - Zakres: detekcja → `BallObservation` → `BallFilter` z `EngineConfig` dla piłkarzyków.
   - Gotowe, gdy: na nakładce widać trajektorię, a w krótkich zasłonięciach pozycja jest przewidywana.
-- [ ] **3.7 Pozycje drążków**
+- [x] **3.7 Pozycje drążków**
   - Cel: wiedzieć, gdzie są figurki każdego drążka.
   - Zakres: figurki z detektora przypisane do drążków po współrzędnej wzdłuż stołu, przesunięcie drążka z ich położenia.
   - Gotowe, gdy: na nakładce każdy drążek ma swoją pozycję i nie skacze między klatkami.
